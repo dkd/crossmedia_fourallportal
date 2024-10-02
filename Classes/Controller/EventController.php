@@ -84,18 +84,18 @@ final class EventController extends ActionController
       $status = 'all';
     } elseif ($status || $search) {
       // Load events with selected status
-      $events = $this->searchEventsWithStatus($status, $search);
+      $events = $this->eventRepository->searchEventsWithStatus($status, $search);
       if ($status !== 'all' && $events->count() === 0) {
         // Widen search to search other statuses than the selected one.
         $searchWidened = true;
-        $events = $this->searchEventsWithStatus(false, $search);
+        $events = $this->eventRepository->searchEventsWithStatus(false, $search);
         $status = 'all';
       }
     } else {
       // Find first status from prioritised list above which yields results
       do {
         $status = key($eventOptions);
-        $events = $this->searchEventsWithStatus($status, $search);
+        $events = $this->eventRepository->searchEventsWithStatus($status, $search);
       } while ($events->count() === 0 && next($eventOptions));
     }
     $view = $this->moduleTemplateFactory->create($this->request);
@@ -203,36 +203,5 @@ final class EventController extends ActionController
     $this->eventExecutionService->sync($syncParameters);
     $this->addFlashMessage(nl2br($fakeResponse->getCollected()) ?: 'No new events to fetch', 'Executed');
     return $this->redirect('index');
-  }
-
-  /**
-   * @param string $status
-   * @param string|null $search
-   * @return QueryResultInterface
-   * @throws InvalidQueryException
-   */
-  protected function searchEventsWithStatus(string $status, string|null $search): QueryResultInterface
-  {
-    $query = $this->eventRepository->createQuery();
-    $constraints = null;
-    if ($status !== 'all') {
-      $constraints = $query->equals('status', $status);
-    }
-
-    if ($search) {
-      $constraints = $query->logicalOr(
-        $query->equals('eventId', (integer)$search),
-        $query->like('module.connectorName', '%' . $search . '%'),
-        $query->like('objectId', '%' . $search . '%'),
-        $query->like('eventType', '%' . $search . '%'),
-      );
-    }
-
-    if ($constraints) {
-      $query->matching($query->logicalAnd($constraints));
-    }
-
-    $query->setOrderings(['crdate' => 'ASC']);
-    return $query->execute();
   }
 }

@@ -126,4 +126,34 @@ class EventRepository extends Repository
     );
     return $query->execute()->getFirst();
   }
+
+    /**
+     * @param string $status
+     * @param string|null $search
+     * @return QueryResultInterface
+     * @throws InvalidQueryException
+     */
+    public function searchEventsWithStatus(string $status, string|null $search): QueryResultInterface
+    {
+        $query = $this->createQuery();
+        $constraints = null;
+
+        if ($search) {
+            $constraints = $query->logicalOr(
+                $query->equals('eventId', (integer)$search),
+                $query->like('module.connectorName', '%' . $search . '%'),
+                $query->like('objectId', '%' . $search . '%'),
+                $query->like('eventType', '%' . $search . '%'),
+            );
+        } elseif ($status !== 'all') {
+            $constraints = $query->equals('status', $status);
+        }
+
+        if ($constraints) {
+            $query->matching($query->logicalAnd($constraints));
+        }
+
+        $query->setOrderings(['crdate' => 'ASC']);
+        return $query->execute();
+    }
 }
