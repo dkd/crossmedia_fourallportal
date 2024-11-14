@@ -5,6 +5,7 @@ namespace Crossmedia\Fourallportal\Service;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\LogEntry;
 use Crossmedia\Fourallportal\Utility\ConstantsUtility;
+use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
@@ -147,14 +148,27 @@ class LoggingService implements SingletonInterface
 
   protected function resolveLogFilePath(string $type, string $identity = null): string
   {
-    $logFilePath = ConstantsUtility::LOG_BASEDIR . $type;
-    if ($identity) {
-      $logFilePath .= '/' . $identity . '.log';
-    } else {
-      $logFilePath .= '.log';
+
+    $fullPath = ConstantsUtility::LOG_BASEDIR;
+
+    # Create extension log file directory
+    if (!is_dir($fullPath)) {
+      if ($identity) {
+        $fullPath .= $type;
+      }
+      GeneralUtility::mkdir_deep($fullPath);
     }
-    $path = pathinfo($logFilePath, PATHINFO_DIRNAME);
-    @mkdir($path, 0755, true);
-    return GeneralUtility::getFileAbsFileName($logFilePath);
+
+    if ($identity) {
+      $fullPath .= '/' . $identity . '.log';
+    } else {
+      $fullPath .= $type . '.log';
+    }
+
+    if (!is_file($fullPath)) {
+      touch($fullPath);
+    }
+
+    return GeneralUtility::getFileAbsFileName(Environment::getProjectPath() . '/'. $fullPath);
   }
 }
