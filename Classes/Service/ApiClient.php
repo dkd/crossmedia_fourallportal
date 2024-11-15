@@ -190,13 +190,13 @@ class ApiClient
     if (!empty($curlError = curl_error($ch))) {
       $message = 'CURL Failed with the Error: ' . $curlError;
       $this->loggingService->logFileTransferActivity($uri, $temporaryFilename . ': ' . $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new ApiException($message);
+      throw new ApiException($message, 2360915917);
     }
 
     if ($info['http_code'] !== 200) {
       $errorMessage = sprintf('CURL response code was %d when fetching "%s": ', $info['http_code'], $uri);
       $this->loggingService->logFileTransferActivity($uri, $temporaryFilename, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new \RuntimeException($errorMessage);
+      throw new \RuntimeException($errorMessage, 3106733633);
     }
 
     curl_close($ch);
@@ -206,7 +206,7 @@ class ApiClient
       unlink($temporaryFilename);
       $message = 'The downloaded file does not match the expected filesize';
       $this->loggingService->logFileTransferActivity($uri, $temporaryFilename . ': ' . $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new ApiException($message);
+      throw new ApiException($message, 2780611060);
     }
 
     if (!file_exists(dirname($filename))) {
@@ -265,7 +265,7 @@ class ApiClient
       default:
         $message = $response['code'] . ': ' . $response['message'];
         $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-        throw new ApiException($message);
+        throw new ApiException($message, 4181110095);
     }
   }
 
@@ -300,6 +300,7 @@ class ApiClient
     );
 
     if (!isset($beans['result'][0])) {
+      $this->loggingService->logConnectionActivity('Bean data request returned no results. Response: ' . json_encode($beans), 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
       throw new ApiException('Bean data request returned no results. Response: ' . json_encode($beans), 1525694885);
     }
 
@@ -387,12 +388,12 @@ class ApiClient
     if (!isset($result['code']) || $result['code'] != 0) {
       $message = $result['message'] ?? 'MamClient: could not communicate with mam api. please try again later';
       $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new ApiException($message . ' - Response code ' . $result['code'] . ': ' . $this->translateResponseCode($result['code']));
+      throw new ApiException($message . ' - Response code ' . $result['code'] . ': ' . $this->translateResponseCode($result['code']), 8133411903);
     }
     if (!is_array($result)) {
       $message = 'The MAM API returned garbage data (not JSON array)';
       $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new ApiException($message);
+      throw new ApiException($message, 9802312867);
     }
   }
 
