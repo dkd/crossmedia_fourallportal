@@ -384,7 +384,7 @@ class EventExecutionService implements SingletonInterface
   {
     $activeModules = [];
     /** @var Server[] $servers */
-    $servers = $this->serverRepository->findByActive(true);
+    $servers = $this->serverRepository->findBy(['active' => true]);
     foreach ($servers as $server) {
       if (!$server->isActive()) {
         continue;
@@ -448,7 +448,7 @@ class EventExecutionService implements SingletonInterface
   {
     $path = $this->getLockFilePath();
     if (file_exists($path)) {
-      throw new LockCreateException('Cannot acquire lock for 4AP sync');
+      throw new LockCreateException('Cannot acquire lock for 4AP sync', 7120480889);
     }
     return touch($path);
   }
@@ -612,13 +612,14 @@ class EventExecutionService implements SingletonInterface
       }
       $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
     }
-//    $responseMetadata = $client->getLastResponse();
-//    $event->setHeaders($responseMetadata['headers']);
-//    $event->setUrl($responseMetadata['url']);
-//    $event->setResponse($responseMetadata['response']);
-//    $event->setPayload($responseMetadata['payload']);
-//    $event->setProcessing(false);
-//    $this->eventRepository->update($event);
+    $responseMetadata = $client->getLastResponse();
+
+    $event->setHeaders($responseMetadata['headers']);
+    $event->setUrl($responseMetadata['url']);
+    $event->setResponse($responseMetadata['response']);
+    $event->setPayload($responseMetadata['payload']);
+    $event->setProcessing(false);
+    $this->eventRepository->update($event);
     try {
       $this->persistenceManager->persistAll();
     } catch (Exception $exception) {
