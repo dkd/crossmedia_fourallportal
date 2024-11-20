@@ -11,7 +11,6 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class ApiClient
 {
-
   protected ?string $sessionId = null;
   protected static array $sessionPool = array();
   protected int $folderCreateMask;
@@ -146,8 +145,8 @@ class ApiClient
   public function saveDerivate(string $filename, string $objectId, string $usage = null): bool|string
   {
 
-    $uri = $this->server->getApiUrl() . '/modules/file/objects/' . $objectId . '/media/' . $usage;
-    $sessionCookie = 'CESESSID=' . $this->sessionId;
+    $uri = $this->server->getApiUrl() . 'modules/file/objects/' . $objectId . '/media/' . $usage;
+    $sessionCookie = 'Cookie: CESESSID=' . $this->sessionId;
 
     $temporaryFilename = tempnam(sys_get_temp_dir(), 'fal_mam-' . $objectId);
 
@@ -170,6 +169,7 @@ class ApiClient
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_WRITEHEADER, $headerBuff);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, (bool)$this->portalConfig['verifyPeer']);
+    curl_setopt($ch, CURLOPT_POST, 0);
 
     curl_exec($ch);
 
@@ -195,8 +195,9 @@ class ApiClient
 
     if ($info['http_code'] !== 200) {
       $errorMessage = sprintf('CURL response code was %d when fetching "%s": ', $info['http_code'], $uri);
+      $this->getLogger()->error(print_r($ch));
       $this->loggingService->logFileTransferActivity($uri, $temporaryFilename, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new \RuntimeException($errorMessage, 3106733633);
+      throw new \TYPO3\CMS\Core\Exception($errorMessage, 3106733633);
     }
 
     curl_close($ch);
@@ -363,7 +364,7 @@ class ApiClient
 
     $this->validateResponseCode($result);
 
-    $this->loggingService->logConnectionActivity(strlen($response) . ' ApiClient.php' . $uri . ' ' . json_encode($data));
+    $this->loggingService->logConnectionActivity(strlen($response) . ' ApiClient.php ' . $uri . ' ' . json_encode($data));
 
     return $result;
   }

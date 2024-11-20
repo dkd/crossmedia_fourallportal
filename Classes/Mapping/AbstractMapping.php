@@ -47,9 +47,10 @@ abstract class AbstractMapping implements MappingInterface
   protected LoggingService $loggingService;
   protected PersistenceManager $persistenceManager;
   protected AccessiblePropertyMapper $accessiblePropertyMapper;
-  protected StorageRepository $storageRepository;
+  protected ?StorageRepository $storageRepository = null;
   protected Session $session;
   protected ConnectionPool $connectionPool;
+
 
   public function injectLoggingService(LoggingService $loggingService)
   {
@@ -66,7 +67,7 @@ abstract class AbstractMapping implements MappingInterface
     $this->accessiblePropertyMapper = $accessiblePropertyMapper;
   }
 
-  public function injectStorageRepository(StorageRepository $storageRepository)
+  public function injectStorageRepository(StorageRepository $storageRepository):void
   {
     $this->storageRepository = $storageRepository;
   }
