@@ -122,7 +122,7 @@ class LoggingService implements SingletonInterface
     $items = [];
     foreach (array_reverse($entries) as $entry) {
       [$date, $severity, $message] = explode(' ', $entry, 3);
-      $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, (int)$severity, $message);
+      $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, (int)$severity, (string)$message);
     }
     return $items;
   }
@@ -136,11 +136,11 @@ class LoggingService implements SingletonInterface
     $fp = fopen($logFile, 'a+');
     // FIXME: $fp should not return boolean !!
     if ($fp !== false) {
-      fwrite($fp, date('Y-m-d_H:i:s') . ' LoggingService.php' . $severity . ' ' . $message . PHP_EOL);
+      fwrite($fp, date('Y-m-d_H:i:s') . ' ' . $severity . ' ' . $message . PHP_EOL);
       fclose($fp);
       if ($severity >= 2/** GeneralUtility::SYSLOG_SEVERITY_WARNING */) {
         $fp = fopen($this->resolveLogFilePath(ConstantsUtility::TEXT_ERRORS), 'a+');
-        fwrite($fp, date('Y-m-d_H:i:s') . ' LoggingService.php' . $severity . ' ' . $message . PHP_EOL);
+        fwrite($fp, date('Y-m-d_H:i:s') . ' ' . $severity . ' ' . $message . PHP_EOL);
         fclose($fp);
       }
     }
@@ -149,18 +149,17 @@ class LoggingService implements SingletonInterface
   protected function resolveLogFilePath(string $type, string $identity = null): string
   {
 
-    $fullPath = ConstantsUtility::LOG_BASEDIR;
+    $fullPath = Environment::getProjectPath() . "/" .ConstantsUtility::LOG_BASEDIR;
 
     # Create extension log file directory
+    if (isset($identity)) {
+      $fullPath .=  $type;
+    }
     if (!is_dir($fullPath)) {
-      if ($identity) {
-        $fullPath .= $type;
-      }
       GeneralUtility::mkdir_deep($fullPath);
     }
-
-    if ($identity) {
-      $fullPath .= '/' . $identity . '.log';
+    if (isset($identity)) {
+      $fullPath .=  '/' . $identity . '.log';
     } else {
       $fullPath .= $type . '.log';
     }
@@ -169,6 +168,6 @@ class LoggingService implements SingletonInterface
       touch($fullPath);
     }
 
-    return GeneralUtility::getFileAbsFileName(Environment::getProjectPath() . '/'. $fullPath);
+    return GeneralUtility::getFileAbsFileName($fullPath);
   }
 }
