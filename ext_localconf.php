@@ -31,7 +31,14 @@ if (!isset($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['fourallportal'])) {
 // register database logs writer
 $GLOBALS['TYPO3_CONF_VARS']['LOG']['Crossmedia']['Fourallportal']['writerConfiguration'] = [
   LogLevelAlias::WARNING => [
-    SystemLogDatabaseWriter::class => [],
+    SystemLogDatabaseWriter::class => [
+      'table' => 'sys_log'
+    ],
+  ],
+  LogLevelAlias::ERROR => [
+    SystemLogDatabaseWriter::class => [
+      'table' => 'sys_log'
+    ],
   ],
 ];
 

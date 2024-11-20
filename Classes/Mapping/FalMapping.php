@@ -28,6 +28,7 @@ use TYPO3\CMS\Core\Resource\File;
 use TYPO3\CMS\Core\Resource\FileInterface;
 use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Resource\Index\MetaDataRepository;
+use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Domain\Model\FileReference;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
@@ -73,7 +74,7 @@ class FalMapping extends AbstractMapping
     // We have to do things the hard way, unfortunately. Because someone didn't implement a real Repository but declared the class a Repository anyway. Sigh.
     $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file')->createQueryBuilder();
     $query = $queryBuilder->select('uid')->from('sys_file')->where($queryBuilder->expr()->eq('remote_id', $queryBuilder->quote($objectId)))->setMaxResults(1);
-    $record = $query->executeQuery()->fetchFirstColumn();
+    $record = $query->executeQuery()->fetchAssociative();
     if ($record) {
       $object = $repository->findByUid($record['uid']);
     }
@@ -107,7 +108,7 @@ class FalMapping extends AbstractMapping
         $deferAfterProcessing = $this->mapPropertiesFromDataToObject($data, $object, $event->getModule());
         break;
       default:
-        throw new RuntimeException('Unknown event type: ' . $event->getEventType());
+        throw new RuntimeException('Unknown event type: ' . $event->getEventType(), 4853457052);
     }
 
     $this->persistenceManager->persistAll();
@@ -183,7 +184,7 @@ class FalMapping extends AbstractMapping
       }
 
       $queryBuilder = (new ConnectionPool())->getConnectionForTable($table)->createQueryBuilder();
-      foreach ($queryBuilder->select(...$selectColumns)->from($table)->execute()->fetchAll() as $record) {
+      foreach ($queryBuilder->select(...$selectColumns)->from($table)->executeQuery()->fetchAllAssociative() as $record) {
         foreach ($collectedFieldNames as $fieldName) {
           $referredValues = [];
           if ($config['columns'][$fieldName]['config']['type'] === 'select' || $config['columns'][$fieldName]['config']['type'] === 'group') {
@@ -252,7 +253,7 @@ class FalMapping extends AbstractMapping
    * @param string $objectId
    * @param array $data
    * @param Event $event
-   * @return File | FileInterface
+   * @return File | FileReference
    * @throws InvalidFileNameException
    * @throws PropertyNotAccessibleException
    * @throws Exception
@@ -289,10 +290,16 @@ class FalMapping extends AbstractMapping
 
     $tempPathAndFilename = GeneralUtility::tempnam('mamfal', $targetFilename);
 
-    $targetFolder = trim($fieldValueReader->readResponseDataField($data['result'][0], 'parent_path', $dimensionMapping) . 'FalMapping.php/');
-    $targetFolder = implode('/', array_map([$this, 'sanitizeFileName'], explode('/', trim($targetFolder, '/')))) . 'FalMapping.php/';
+    $targetFolder = trim($fieldValueReader->readResponseDataField($data['result'][0], 'parent_path', $dimensionMapping) . '/');
+    $targetFolder = implode('/', array_map([$this, 'sanitizeFileName'], explode('/', trim($targetFolder, '/')))) . '/';
 
     $client = $this->getClientByServer($event->getModule()->getServer());
+
+    #FIXME
+    if ($this->storageRepository == null) {
+      $this->storageRepository = GeneralUtility::makeInstance(StorageRepository::class);
+    }
+
     $storage = $this->storageRepository->findByUid($event->getModule()->getFalStorage());
     try {
       $folder = $storage->getFolder($targetFolder);
@@ -344,7 +351,7 @@ class FalMapping extends AbstractMapping
               // actual error. Any problem ranging from a missing file over file/folder permissions to user
               // restrictions may be in effect, all of which result in the same error. We target the "file is
               // missing" case specifically here since that's the case we are likely to encounter when renaming.
-              $queryBuilder->delete('sys_file')->where($queryBuilder->expr()->eq('uid', $existingFileRow['uid']))->execute();
+              $queryBuilder->delete('sys_file')->where($queryBuilder->expr()->eq('uid', $existingFileRow['uid']))->executeStatement();
             } elseif ($existingFileRow['name'] === $targetFilename) {
               // Note: this case reached only if file physically exists and has the same name, due to check above.
               $file = $existingFile;
@@ -366,7 +373,7 @@ class FalMapping extends AbstractMapping
       $file->setContents($contents);
       $file->updateProperties(['modification_date' => $remoteModificationTime]);
     } else {
-      //echo 'Skipping: ' . $targetFolder . $targetFilename . PHP_EOL;
+      echo 'Skipping: ' . $targetFolder . $targetFilename . PHP_EOL;
     }
 
     if (!$file) {
@@ -379,10 +386,9 @@ class FalMapping extends AbstractMapping
       ->setMaxResults(1);
 
     if (!is_int($query->execute())) {
-      throw new RuntimeException('Failed to update remote_id column of sys_file table for file with UID ' . $file->getUid());
+      throw new RuntimeException('Failed to update remote_id column of sys_file table for file with UID ' . $file->getUid(), 6838585740);
     }
-
-    return $file;
+    return GeneralUtility::makeInstance(FileReference::class, $file);
   }
 
   /**
