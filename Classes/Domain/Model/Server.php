@@ -34,16 +34,16 @@ class Server extends AbstractEntity
    * modules
    *
    * @var ObjectStorage<Module>|null
-   * @TYPO3\CMS\Extbase\Annotation\ORM\Cascade("remove")
    */
+  #[\TYPO3\CMS\Extbase\Annotation\ORM\Cascade(['value' => 'remove'])]
   protected ?ObjectStorage $modules;
 
   /**
    * modules
    *
    * @var ObjectStorage<DimensionMapping>|null
-   * @TYPO3\CMS\Extbase\Annotation\ORM\Cascade("remove")
    */
+  #[\TYPO3\CMS\Extbase\Annotation\ORM\Cascade(['value' => 'remove'])]
   protected ?ObjectStorage $dimensionMappings;
 
   /**

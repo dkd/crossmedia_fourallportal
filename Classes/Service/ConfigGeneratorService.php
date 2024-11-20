@@ -44,7 +44,7 @@ class ConfigGeneratorService
    * @param bool $readOnly If TRUE, generates TCA fields as read-only
    * @throws Exception
    */
-  public function generateTableConfiguration($entityClassName = null, $readOnly = false)
+  public function generateTableConfiguration($entityClassName = null, $readOnly = false): void
   {
     foreach ($this->getEntityClassNames($entityClassName) as $entityClassName) {
       $tca = $this->dynamicModelGenerator->generateAutomaticTableConfigurationForModelClassName($entityClassName, $readOnly);
@@ -82,7 +82,7 @@ class ConfigGeneratorService
    * @throws IllegalObjectTypeException
    * @throws UnknownObjectException
    */
-  public function generateAbstractModelClassCommand(SymfonyStyle $io, $entityClassName = null, $strict = false)
+  public function generateAbstractModelClassCommand(SymfonyStyle $io, $entityClassName = null, $strict = false): void
   {
     $modulesByEntityClassName = [];
     foreach ($this->dynamicModelGenerator->getAllConfiguredModules() as $module) {
@@ -125,7 +125,7 @@ class ConfigGeneratorService
    * schema fetching and uses the static schema instead, when the
    * extension has a static schema.
    */
-  public function generateSqlSchemaCommand()
+  public function generateSqlSchemaCommand(): void
   {
     $modulesByExtensionKey = [];
     foreach ($this->dynamicModelGenerator->getAllConfiguredModules() as $name => $module) {

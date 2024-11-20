@@ -28,8 +28,8 @@ class DimensionMapping extends AbstractEntity
    * modules
    *
    * @var ObjectStorage<Dimension>|null
-   * @TYPO3\CMS\Extbase\Annotation\ORM\Cascade("remove")
    */
+  #[\TYPO3\CMS\Extbase\Annotation\ORM\Cascade(['value' => 'remove'])]
   protected ?ObjectStorage $dimensions = null;
   protected string $metricOrImperial = 'Metric';
   protected bool $active = false;
