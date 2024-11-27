@@ -44,44 +44,22 @@ use TYPO3\CMS\Extbase\Reflection\ReflectionService;
 abstract class AbstractMapping implements MappingInterface
 {
   protected string $repositoryClassName;
-  protected LoggingService $loggingService;
-  protected PersistenceManager $persistenceManager;
-  protected AccessiblePropertyMapper $accessiblePropertyMapper;
+  protected ?LoggingService $loggingService = null;
+  protected ?PersistenceManager $persistenceManager = null;
+  protected ?AccessiblePropertyMapper $accessiblePropertyMapper = null;
   protected ?StorageRepository $storageRepository = null;
-  protected Session $session;
-  protected ConnectionPool $connectionPool;
+  protected ?Session $session = null;
+  protected ?ConnectionPool $connectionPool = null;
 
-
-  public function injectLoggingService(LoggingService $loggingService)
+  public function __construct()
   {
-    $this->loggingService = $loggingService;
+    $this->loggingService = GeneralUtility::makeInstance(LoggingService::class);
+    $this->persistenceManager = GeneralUtility::makeInstance(PersistenceManager::class);
+    $this->accessiblePropertyMapper = GeneralUtility::makeInstance(AccessiblePropertyMapper::class);
+    $this->storageRepository = GeneralUtility::makeInstance(StorageRepository::class);
+    $this->session = GeneralUtility::makeInstance(Session::class);
+    $this->connectionPool = GeneralUtility::makeInstance(ConnectionPool::class);
   }
-
-  public function injectPersistenceManager(PersistenceManager $persistenceManager)
-  {
-    $this->persistenceManager = $persistenceManager;
-  }
-
-  public function injectAccessiblePropertyMapper(AccessiblePropertyMapper $accessiblePropertyMapper)
-  {
-    $this->accessiblePropertyMapper = $accessiblePropertyMapper;
-  }
-
-  public function injectStorageRepository(StorageRepository $storageRepository):void
-  {
-    $this->storageRepository = $storageRepository;
-  }
-
-  public function injectSession(Session $session)
-  {
-    $this->session = $session;
-  }
-
-  public function injectConnectionPool(ConnectionPool $connectionPool)
-  {
-    $this->connectionPool = $connectionPool;
-  }
-
 
   /**
    * @param array $data
@@ -144,7 +122,7 @@ abstract class AbstractMapping implements MappingInterface
         );
         break;
       default:
-        throw new RuntimeException('Unknown event type: ' . $event->getEventType());
+        throw new RuntimeException('Unknown event type: ' . $event->getEventType(), 4961585388);
     }
 
     if (isset($object)) {
@@ -509,30 +487,13 @@ abstract class AbstractMapping implements MappingInterface
   protected function determineDataTypeForProperty($propertyName, $object): bool|string
   {
     if (property_exists(get_class($object), $propertyName)) {
-      $property = new ReflectionService($object, $propertyName);
-      $classSchema = $property->getClassSchema($object);
-      $varTags = $classSchema->getProperty('var');
-      if (!empty($varTags)) {
-        return strpos($varTags[0], ' ') !== false ? substr($varTags[0], 0, strpos($varTags[0], ' ')) : $varTags[0];
-      }
+      $reflectionService = GeneralUtility::makeInstance(ReflectionService::class);
+      $classSchema = $reflectionService->getClassSchema($object);
+      $property = $classSchema->getProperty($propertyName);
+      return $property->getType();
     }
 
-    if (method_exists(get_class($object), 'set' . ucfirst($propertyName))) {
-      /** @see .build/vendor/typo3/cms-core/Documentation/Changelog/9.0/Breaking-57594-OptimizeReflectionServiceCacheHandling.rst */
-      $method = $classSchema->getMethod('set' . ucfirst($propertyName));
-      $parameters = $method->getParameters();
-      if ($parameters[0]->getType() !== null) {
-        return (string)$parameters[0]->getType();
-      }
-
-      $varTags = $method->getParameter('param');
-      if (!empty($varTags)) {
-        $array = explode(' ', $varTags[0]);
-        return reset($array);
-      }
-    }
-
-    throw new RuntimeException('Type of property ' . $propertyName . ' on ' . get_class($object) . ' could not be determined');
+    throw new RuntimeException('Type of property ' . $propertyName . ' on ' . get_class($object) . ' could not be determined', 8035246555);
   }
 
   /**
@@ -744,7 +705,7 @@ abstract class AbstractMapping implements MappingInterface
           $event->getModule()->getModuleName(),
           $event->getObjectId(),
           $systemLanguage
-        )
+        ), 3193154734
       );
     }
 
@@ -800,7 +761,7 @@ abstract class AbstractMapping implements MappingInterface
           $event->getObjectId(),
           $systemLanguage,
           $recordUid
-        )
+        ), 4866018335
       );
     }
 

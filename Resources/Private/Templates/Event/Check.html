@@ -37,6 +37,31 @@
       </div>
     </f:else>
   </f:if>
+	<f:link.action
+		action="execute"
+		arguments="{event: event}"
+		extensionName="Fourallportal"
+		controller="Event"
+		class="btn btn-danger" title="Execute event">
+                                    <span>
+                                        <core:icon identifier="actions-play"
+																									 alternativeMarkupIdentifier="inline"/>
+                                    </span>
+		Execute
+	</f:link.action>
+	<f:link.action
+		action="reset"
+		arguments="{event: event}"
+		extensionName="Fourallportal"
+		controller="Event"
+		class="btn btn-default" title="Reset event">
+                                    <span class="text-danger">
+                                        <core:icon identifier="actions-refresh"
+																									 alternativeMarkupIdentifier="inline"/>
+                                    </span>
+		Reset
+	</f:link.action>
+	<hr>
 
   <f:render partial="Events"
             arguments="{events: events, highlightEvent: event, paginate: 0, deleted: deleted}"/>
@@ -48,14 +73,16 @@
   <f:render partial="Log" arguments="{log: objectLog}"/>
 
   <h4>Request payload</h4>
-  <f:format.raw>{event.payload}</f:format.raw>
-
+	<pre>
+  	<f:format.raw>{event.payload}</f:format.raw>
+	</pre>
   <h4>Response headers</h4>
   <f:format.raw>{event.headers}</f:format.raw>
 
   <h4>Response body</h4>
-  <f:format.raw>{event.response}</f:format.raw>
-
+	<pre>
+  	<f:format.raw>{event.response}</f:format.raw>
+	</pre>
 </f:section>
 
 </html>

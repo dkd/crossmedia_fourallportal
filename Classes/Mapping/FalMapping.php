@@ -25,6 +25,7 @@ use TYPO3\CMS\Core\Resource\Exception\InsufficientFolderReadPermissionsException
 use TYPO3\CMS\Core\Resource\Exception\InsufficientFolderWritePermissionsException;
 use TYPO3\CMS\Core\Resource\Exception\InvalidFileNameException;
 use TYPO3\CMS\Core\Resource\File;
+use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Resource\FileInterface;
 use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Resource\Index\MetaDataRepository;
@@ -244,7 +245,11 @@ class FalMapping extends AbstractMapping
 
     if (!empty($metadata)) {
       $metadataRepository = $this->getMetaDataRepository();
+      echo "<pre>" . print_r($metadata) . "</pre>";
+      echo "object:" . print_r($object->_getProperties());
+
       $metadataRepository->update($object->getUid(), $metadata);
+      $this->persistenceManager->persistAll();
     }
     return $deferAfterProcessing;
   }
@@ -263,7 +268,7 @@ class FalMapping extends AbstractMapping
    * @throws InsufficientFolderWritePermissionsException
    * @throws \Exception
    */
-  protected function downloadFileAndGetFileObject(string $objectId, array $data, Event $event): File|FileInterface
+  protected function downloadFileAndGetFileObject(string $objectId, array $data, Event $event): File|FileReference
   {
     $dimensionMapping = $event->getModule()->getServer()->getDimensionMappings()->current();
     $fieldValueReader = new ResponseDataFieldValueReader();
@@ -295,17 +300,11 @@ class FalMapping extends AbstractMapping
 
     $client = $this->getClientByServer($event->getModule()->getServer());
 
-    #FIXME
-    if ($this->storageRepository == null) {
-      $this->storageRepository = GeneralUtility::makeInstance(StorageRepository::class);
-    }
-
     $storage = $this->storageRepository->findByUid($event->getModule()->getFalStorage());
     try {
       $folder = $storage->getFolder($targetFolder);
     } catch (FolderDoesNotExistException $error) {
       $folder = $storage->createFolder($targetFolder);
-      echo 'Created folder ' . $targetFolder . PHP_EOL;
     }
 
     $download = !empty($targetFolder . $targetFilename);
@@ -317,9 +316,10 @@ class FalMapping extends AbstractMapping
       ->where('remote_id = :objectId')
       ->setParameter('objectId', $objectId);
     $existingFileRows = $query->executeQuery();
+
     if ($folder->hasFile($targetFilename)) {
-      /** @var FileInterface $file */
-      $file = reset($this->getObjectRepository()->searchByName($folder, $targetFilename)) ?: null;
+      $file = $this->searchFile($folder, $targetFilename);
+
       $remoteModificationTime = (
       new DateTime($fieldValueReader->readResponseDataField($data['result'][0], 'mod_time_img', $dimensionMapping)
         ?? $fieldValueReader->readResponseDataField($data['result'][0], 'mod_time', $dimensionMapping)
@@ -361,7 +361,7 @@ class FalMapping extends AbstractMapping
           $file = $folder->createFile($targetFilename);
         }
       } catch (ExistingTargetFileNameException $error) {
-        $file = reset($this->getObjectRepository()->searchByName($folder, $targetFilename));
+        $file = $this->searchFile($folder, $targetFilename);
       } catch (ApiException $error) {
         throw new RuntimeException($error->getMessage(), $error->getCode());
       }
@@ -369,9 +369,8 @@ class FalMapping extends AbstractMapping
       if (!$file) {
         $file = $folder->createFile($targetFilename);
       }
-
-      $file->setContents($contents);
       $file->updateProperties(['modification_date' => $remoteModificationTime]);
+      $file->setContents($contents);
     } else {
       echo 'Skipping: ' . $targetFolder . $targetFilename . PHP_EOL;
     }
@@ -534,5 +533,19 @@ class FalMapping extends AbstractMapping
   protected function getCharsetConversion(): CharsetConverter
   {
     return GeneralUtility::makeInstance(CharsetConverter::class);
+  }
+
+  protected function searchFile(\TYPO3\CMS\Core\Resource\Folder $folder, string $filename):mixed {
+    try {
+      if ($folder->hasFile($filename)) {
+        $file = $folder->getFile($filename);
+        if ($file) {
+          return $file;
+        }
+      }
+    } catch (Exception $e) {
+      // Optional: Logging der Fehler
+      return null;
+    }
   }
 }
