@@ -18,13 +18,9 @@ $EM_CONF[$_EXTKEY] = [
   'author' => 'Eyad Abdullah',
   'author_email' => 'e.abdullah@4allportal.com',
   'state' => 'alpha',
-  'internal' => '',
-  'uploadfolder' => '0',
-  'createDirs' => '',
-  'clearCacheOnLoad' => 0,
   'constraints' => [
     'depends' => [
-      'typo3' => '12.3.0-12.4.99',
+      'typo3' => '12.4.0-12.4.99',
     ],
     'conflicts' => [],
     'suggests' => [],

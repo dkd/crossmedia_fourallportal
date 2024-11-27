@@ -610,7 +610,9 @@ class EventExecutionService implements SingletonInterface
       if ($updateEventId) {
         $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
       }
+
       $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
+      throw $exception;
     }
     $responseMetadata = $client->getLastResponse();
 
@@ -628,6 +630,7 @@ class EventExecutionService implements SingletonInterface
       $this->persistenceManager->persistAll();
     } catch (Exception $exception) {
       $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
+      throw $exception;
     }
     $parameters?->countExecutedEvent();
   }

@@ -176,6 +176,7 @@ final class EventController extends ActionController
 
     $message = $fakeResponse->getCollected() ?: 'No output from action';
 
+    /* Any hooks for post-execution processing */
     if (is_array($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] ?? null)) {
       foreach ($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] as $postExecutionHookClass) {
         /** @var EventExecutionHookInterface $postExecutionHookInstance */
