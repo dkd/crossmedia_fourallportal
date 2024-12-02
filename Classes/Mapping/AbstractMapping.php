@@ -20,6 +20,7 @@ use TYPO3\CMS\Core\Domain\Repository\PageRepository;
 use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\TypoScript\FrontendTypoScript;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Resource\File;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
 use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapper;
@@ -278,7 +279,7 @@ abstract class AbstractMapping implements MappingInterface
    * @throws ReflectionException
    * @throws TypeConverterException
    */
-  protected function mapPropertiesFromDataToObject(array $data, AbstractEntity $object, Module $module, DimensionMapping $dimensionMapping = null): bool
+  protected function mapPropertiesFromDataToObject(array $data, AbstractEntity|File $object, Module $module, DimensionMapping $dimensionMapping = null): bool
   {
     if (!$data['result']) {
       return true;
@@ -327,7 +328,7 @@ abstract class AbstractMapping implements MappingInterface
    * @throws InvalidSourceException
    * @throws TypeConverterException
    */
-  protected function mapPropertyValueToObject(string $propertyName, mixed $propertyValue, AbstractEntity $object): bool
+  protected function mapPropertyValueToObject(string $propertyName, mixed $propertyValue, AbstractEntity|File $object): bool
   {
     if (!property_exists(get_class($object), $propertyName)) {
       return false;

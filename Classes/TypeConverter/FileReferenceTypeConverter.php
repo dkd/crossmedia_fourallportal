@@ -3,7 +3,6 @@
 namespace Crossmedia\Fourallportal\TypeConverter;
 
 use Crossmedia\Fourallportal\Mapping\DeferralException;
-use Crossmedia\Fourallportal\Service\LoggingService;
 use Doctrine\DBAL\Exception;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
@@ -11,6 +10,7 @@ use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Domain\Model\FileReference;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
+use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapFactory;
 use TYPO3\CMS\Extbase\Persistence\RepositoryInterface;
 use TYPO3\CMS\Extbase\Property\Exception\InvalidSourceException;
 use TYPO3\CMS\Extbase\Property\Exception\TargetNotFoundException;
@@ -24,16 +24,16 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
   protected $sourceTypes = [
     'string'
   ];
-  protected LoggingService|null $dataMapFactory = null;
+  protected DataMapFactory|null $dataMapFactory = null;
 
   protected FileRepository|null $fileRepository = null;
 
-  public function injectLoggingService(LoggingService $dataMapFactory): void
+  public function injectLoggingService(DataMapFactory $dataMapFactory): void
   {
     $this->dataMapFactory = $dataMapFactory;
   }
 
-  public function injectFileRepository(FileRepository $fileRepository): void
+  public function injectDataMapFactory(FileRepository $fileRepository): void
   {
     $this->fileRepository = $fileRepository;
   }

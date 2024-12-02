@@ -227,31 +227,36 @@ class FalMapping extends AbstractMapping
    * @throws InvalidSourceException
    * @throws TypeConverterException
    */
-  protected function mapPropertiesFromDataToObject(array $data, AbstractEntity $object, Module $module, DimensionMapping $dimensionMapping = null): bool
+  protected function mapPropertiesFromDataToObject(array $data, AbstractEntity|File $object, Module $module, DimensionMapping $dimensionMapping = null): bool
   {
-    $deferAfterProcessing = parent::mapPropertiesFromDataToObject($data, $object, $module, $dimensionMapping);
-    $metadata = [];
-    $map = MappingRegister::resolvePropertyMapForMapper(static::class);
-    $fieldValueReader = new ResponseDataFieldValueReader();
 
-    foreach ($data['result'][0]['properties'] as $propertyName => $propertyValue) {
-      if (isset($map[$propertyName])) {
-        $targetPropertyName = $map[$propertyName];
-        if (str_starts_with($targetPropertyName, 'metadata.')) {
-          $metadata[substr($targetPropertyName, 9)] = $fieldValueReader->readResponseDataField($data['result'][0], $propertyName, $dimensionMapping);
+    // If it's a File object, we'll handle metadata differently
+    if ($object instanceof File) {
+      $metadata = [];
+      $map = MappingRegister::resolvePropertyMapForMapper(static::class);
+      $fieldValueReader = new ResponseDataFieldValueReader();
+      $dimensionMapping = $dimensionMapping ?? $module->getServer()->getDimensionMappings()->current();
+
+      foreach ($data['result'][0]['properties'] as $propertyName => $propertyValue) {
+        if (isset($map[$propertyName])) {
+          $targetPropertyName = $map[$propertyName];
+          if (str_starts_with($targetPropertyName, 'metadata.')) {
+            $metadata[substr($targetPropertyName, 9)] = $fieldValueReader->readResponseDataField($data['result'][0], $propertyName, $dimensionMapping);
+          }
         }
       }
+
+      if (!empty($metadata)) {
+        $metadataRepository = $this->getMetaDataRepository();
+        $metadataRepository->update($object->getUid(), $metadata);
+        $this->persistenceManager->persistAll();
+      }
+
+      return false; // No deferral needed for File objects
     }
 
-    if (!empty($metadata)) {
-      $metadataRepository = $this->getMetaDataRepository();
-      echo "<pre>" . print_r($metadata) . "</pre>";
-      echo "object:" . print_r($object->_getProperties());
-
-      $metadataRepository->update($object->getUid(), $metadata);
-      $this->persistenceManager->persistAll();
-    }
-    return $deferAfterProcessing;
+    // Fallback to parent method for AbstractEntity objects
+    return parent::mapPropertiesFromDataToObject($data, $object, $module, $dimensionMapping);
   }
 
   /**
@@ -268,7 +273,7 @@ class FalMapping extends AbstractMapping
    * @throws InsufficientFolderWritePermissionsException
    * @throws \Exception
    */
-  protected function downloadFileAndGetFileObject(string $objectId, array $data, Event $event): File|FileReference
+  protected function downloadFileAndGetFileObject(string $objectId, array $data, Event $event): File|FileReference|AbstractEntity
   {
     $dimensionMapping = $event->getModule()->getServer()->getDimensionMappings()->current();
     $fieldValueReader = new ResponseDataFieldValueReader();
@@ -387,7 +392,8 @@ class FalMapping extends AbstractMapping
     if (!is_int($query->execute())) {
       throw new RuntimeException('Failed to update remote_id column of sys_file table for file with UID ' . $file->getUid(), 6838585740);
     }
-    return GeneralUtility::makeInstance(FileReference::class, $file);
+
+    return $file;
   }
 
   /**
@@ -422,7 +428,7 @@ class FalMapping extends AbstractMapping
       $lowercaseExtension = 'jpg';
     }
     if ($extension !== $lowercaseExtension) {
-      $cleanFileName = pathinfo($cleanFileName, PATHINFO_FILENAME) . 'Mapping' . $lowercaseExtension;
+      $cleanFileName = pathinfo($cleanFileName, PATHINFO_FILENAME) . '.' . $lowercaseExtension;
     }
     return $cleanFileName;
   }
@@ -535,17 +541,15 @@ class FalMapping extends AbstractMapping
     return GeneralUtility::makeInstance(CharsetConverter::class);
   }
 
-  protected function searchFile(\TYPO3\CMS\Core\Resource\Folder $folder, string $filename):mixed {
+  protected function searchFile(\TYPO3\CMS\Core\Resource\Folder $folder, string $filename):File|null {
     try {
       if ($folder->hasFile($filename)) {
         $file = $folder->getFile($filename);
-        if ($file) {
-          return $file;
-        }
       }
     } catch (Exception $e) {
       // Optional: Logging der Fehler
       return null;
     }
+    return $file;
   }
 }
