@@ -767,7 +767,7 @@ abstract class AbstractMapping implements MappingInterface
     }
 
     if ($systemLanguage) {
-      $createdObject->_setProperty('_localizedUid', $existingRow['uid'] ?? $recordUid);
+      $createdObject->_setProperty('_localizedUid', (int)$existingRow['uid'] ?? $recordUid);
       $createdObject->_setProperty('_languageUid', $systemLanguage);
       $createdObject->setRemoteId($event->getObjectId());
     }
