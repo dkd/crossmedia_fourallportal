@@ -121,8 +121,10 @@ class LoggingService implements SingletonInterface
     $entries = explode(PHP_EOL, trim($contents));
     $items = [];
     foreach (array_reverse($entries) as $entry) {
-      [$date, $severity, $message] = explode(' ', $entry, 3);
-      $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, (int)$severity, (string)$message);
+      [$date, $severity, $message] = explode(' ', $entry, 3) + [null, null, null];
+      if ($date && $severity && $message) {
+        $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, (int)$severity, (string)$message);
+      }
     }
     return $items;
   }

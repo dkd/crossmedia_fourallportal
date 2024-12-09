@@ -38,6 +38,17 @@
     </f:else>
   </f:if>
 	<f:link.action
+	action="index"
+	extensionName="Fourallportal"
+	controller="Event"
+	class="btn btn-default" title="Overview">
+                                    <span class="text-danger">
+                                        <core:icon identifier="actions-refresh"
+																									 alternativeMarkupIdentifier="inline"/>
+                                    </span>
+	Overview
+</f:link.action>
+	<f:link.action
 		action="execute"
 		arguments="{event: event}"
 		extensionName="Fourallportal"
@@ -66,10 +77,11 @@
   <f:render partial="Events"
             arguments="{events: events, highlightEvent: event, paginate: 0, deleted: deleted}"/>
 
-  <h4>Event log</h4>
+
+  <h3>Event log</h3>
   <f:render partial="Log" arguments="{log: eventLog}"/>
 
-  <h4>Object log</h4>
+  <h3>Object log</h3>
   <f:render partial="Log" arguments="{log: objectLog}"/>
 
   <h4>Request payload</h4>
