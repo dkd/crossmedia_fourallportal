@@ -339,7 +339,7 @@ class FalMapping extends AbstractMapping
         $tempPathAndFilename = $client->saveDerivate($tempPathAndFilename, $event->getObjectId(), $event->getModule()->getUsageFlag());
         $contents = file_get_contents($tempPathAndFilename);
         unlink($tempPathAndFilename);
-        $targetFilename = $this->sanitizeFileName(pathinfo($tempPathAndFilename, PATHINFO_BASENAME));
+        $targetFilename = $this->sanitizeFileName(pathinfo($targetFilename, PATHINFO_BASENAME));
         if ($existingFileRows) {
           foreach ($existingFileRows as $existingFileRow) {
             $existingFile = $storage->getFile($existingFileRow['identifier']);
@@ -542,6 +542,7 @@ class FalMapping extends AbstractMapping
   }
 
   protected function searchFile(\TYPO3\CMS\Core\Resource\Folder $folder, string $filename):File|null {
+    $file = null;
     try {
       if ($folder->hasFile($filename)) {
         $file = $folder->getFile($filename);
