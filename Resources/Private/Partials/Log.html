@@ -1,21 +1,21 @@
 <f:if condition="{log}">
-    <f:else>
-        <p>No entries logged</p>
-    </f:else>
-    <f:then>
-        <table class="table table-bordered table-striped table-vertical-top">
-            <thead>
-                <tr>
-                    <td class="col-xs-2"><strong>Date</strong></td>
-                    <td><strong>Message</strong></td>
-                </tr>
-            </thead>
-            <f:for each="{log}" as="logEntry">
-                <tr class="text-{logEntry.severityClassName}">
-                    <td>{logEntry.date}</td>
-                    <td>{logEntry.message}</td>
-                </tr>
-            </f:for>
-        </table>
-    </f:then>
+	<f:then>
+		<table class="table table-bordered table-striped table-vertical-top">
+			<thead>
+			<tr>
+				<td class="col-xs-2"><strong>Date</strong></td>
+				<td><strong>Message</strong></td>
+			</tr>
+			</thead>
+			<f:for each="{log}" as="logEntry">
+				<tr class="text-{logEntry.severityClassName}">
+					<td>{logEntry.date}</td>
+					<td>{logEntry.message}</td>
+				</tr>
+			</f:for>
+		</table>
+	</f:then>
+	<f:else>
+			<p>No entries logged</p>
+	</f:else>
 </f:if>
