@@ -492,10 +492,11 @@ class EventExecutionService implements SingletonInterface
   protected function resetSchedulerTask($requiredAge): void
   {
     $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
-    $queryBuilder->select('uid')->from('tx_scheduler_task');
-    $result = $queryBuilder->executeQuery();
+    $result = $queryBuilder->select('uid')->from('tx_scheduler_task')->executeQuery();
     $deadAge = time() - $requiredAge;
-    while (($taskRecord = $result->fetchAllKeyValue())) {
+    $taskRecords = $result->fetchAllAssociative();
+
+    foreach($taskRecords as $taskRecord) {
       $task = $this->schedulerTaskRepository->findByUid($taskRecord['uid']);
       if ($this->schedulerTaskRepository->isTaskMarkedAsRunning($task) &&
         $task instanceof ExecuteSchedulableCommandTask &&
