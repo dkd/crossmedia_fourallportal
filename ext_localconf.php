@@ -12,9 +12,9 @@ use Crossmedia\Fourallportal\Log\SystemLogDatabaseWriter;
 use Crossmedia\Fourallportal\Mapping\FalMapping;
 use Crossmedia\Fourallportal\Mapping\MappingRegister;
 use Psr\Log\LogLevel as LogLevelAlias;
-use TYPO3\CMS\Core\Cache\Backend\SimpleFileBackend;
-use TYPO3\CMS\Core\Cache\Frontend\PhpFrontend;
 use TYPO3\CMS\Extbase\Utility\ExtensionUtility;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Core\Environment;
 
 //$backendConfiguration = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(
 //  \TYPO3\CMS\Core\Configuration\ExtensionConfiguration::class
@@ -93,6 +93,18 @@ MappingRegister::registerMapping(
 //    ],
 //  );
 //}
+
+$directories = [
+  'typo3temp/var/locks',
+  'typo3temp/var/logs/fourallportal',
+];
+
+foreach ($directories as $directory) {
+  $fullPath = Environment::getProjectPath() . '/' . $directory;
+  if (!is_dir($fullPath)) {
+    GeneralUtility::mkdir_deep($fullPath);
+  }
+}
 
 ExtensionUtility::configurePlugin('Crossmedia.Fourallportal', 'module', [
   EventController::class => ['index', 'check', 'reset', 'execute', 'sync'],

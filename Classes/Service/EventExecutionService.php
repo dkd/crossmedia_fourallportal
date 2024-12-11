@@ -27,6 +27,7 @@ use TYPO3\CMS\Extbase\Persistence\PersistenceManagerInterface;
 use TYPO3\CMS\Extbase\Persistence\QueryResultInterface;
 use TYPO3\CMS\Scheduler\Domain\Repository\SchedulerTaskRepository;
 use TYPO3\CMS\Scheduler\Task\ExecuteSchedulableCommandTask;
+use TYPO3\CMS\Core\Core\Environment;
 
 class EventExecutionService implements SingletonInterface
 {
@@ -509,12 +510,13 @@ class EventExecutionService implements SingletonInterface
     }
   }
 
+
   /**
    * @return string
    */
   protected function getLockFilePath(): string
   {
-    return GeneralUtility::getFileAbsFileName('typo3temp/var/locks/') . 'lock_4ap_sync.lock';
+    return Environment::getProjectPath() . '/' . ('typo3temp/var/locks/') . 'lock_4ap_sync.lock';
   }
 
   /**
