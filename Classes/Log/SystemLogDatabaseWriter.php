@@ -21,6 +21,10 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
  */
 class SystemLogDatabaseWriter extends DatabaseWriter
 {
+  public function __construct(private readonly ConnectionPool $connectionPool, array $options = [])
+  {
+    parent::__construct($options);
+  }
 
   public function writeLog(LogRecord $record): WriterInterface|static
   {

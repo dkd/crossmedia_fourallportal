@@ -27,15 +27,10 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
   protected DataMapFactory|null $dataMapFactory = null;
 
   protected FileRepository|null $fileRepository = null;
-
-  public function injectLoggingService(DataMapFactory $dataMapFactory): void
+  public function __construct(\TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapFactory $dataMapFactory, \TYPO3\CMS\Core\Resource\FileRepository $fileRepository)
   {
-    $this->dataMapFactory = $dataMapFactory;
-  }
-
-  public function injectDataMapFactory(FileRepository $fileRepository): void
-  {
-    $this->fileRepository = $fileRepository;
+      $this->dataMapFactory = $dataMapFactory;
+      $this->fileRepository = $fileRepository;
   }
 
   /**
@@ -97,10 +92,7 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
     // resumed on next run which should then have imported the target file so we can point to it.
     $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file')->createQueryBuilder();
     $original = $queryBuilder->select('f.uid')->from('sys_file', 'f')
-      ->where($queryBuilder->expr()->eq('f.remote_id', $queryBuilder->quote($source)))
-      ->setMaxResults(1)
-      ->execute()
-      ->fetchAll();
+      ->where($queryBuilder->expr()->eq('f.remote_id', $queryBuilder->quote($source)))->setMaxResults(1)->executeQuery()->fetchAllAssociative();
     if (!isset($original[0]['uid'])) {
       $parentObjectId = method_exists($this->parentObject, 'getRemoteId') ? $this->parentObject->getRemoteId() : $this->parentObject->getUid();
       throw new DeferralException(

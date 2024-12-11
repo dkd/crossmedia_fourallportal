@@ -34,7 +34,7 @@ class ComplexTypeConverter extends AbstractUuidAwareObjectTypeConverter implemen
    * @param string $propertyName
    * @return void
    */
-  public function setParentObjectAndProperty($object, $propertyName): mixed
+  public function setParentObjectAndProperty($object, $propertyName):null
   {
     $this->parentObject = $object;
     $this->propertyName = $propertyName;
@@ -64,7 +64,7 @@ class ComplexTypeConverter extends AbstractUuidAwareObjectTypeConverter implemen
     /** @var Module $module */
     $module = $this->getModuleRepository()->findOneByMappingClass($mappingClass);
     if (!$module) {
-      throw new \RuntimeException(sprintf('No module exists which uses the mapping class "%s", cannot convert data', $mappingClass));
+      throw new \RuntimeException(sprintf('No module exists which uses the mapping class "%s", cannot convert data', $mappingClass), 3056729041);
     }
 
     $moduleConfiguration = $module->getModuleConfiguration();
@@ -112,7 +112,7 @@ class ComplexTypeConverter extends AbstractUuidAwareObjectTypeConverter implemen
     if (isset($mappers[$targetEntityClassName])) {
       return $mappers[$targetEntityClassName];
     }
-    throw new \RuntimeException(sprintf('No valid MappingInterface found for class "%s"', $targetEntityClassName));
+    throw new \RuntimeException(sprintf('No valid MappingInterface found for class "%s"', $targetEntityClassName), 3035073972);
   }
 
   /**
