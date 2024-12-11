@@ -100,8 +100,8 @@ final class ServerController extends ActionController
    * @param Server $server
    * @return ResponseInterface
    * @throws ApiException
-   * @IgnoreValidation("server")
    * */
+  #[IgnoreValidation(['argumentName' => 'server'])]
   public function checkAction(Server $server): ResponseInterface
   {
     $status = [

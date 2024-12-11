@@ -30,7 +30,7 @@ class RelatedModuleViewHelper extends AbstractViewHelper
 
   protected $escapeOutput = false;
 
-  public function initializeArguments()
+  public function initializeArguments(): void
   {
     $this->registerArgument('content', 'string', 'Tag content - if not specified, taken from tag body');
     $this->registerArgument('module', Module::class, 'Module', true);
@@ -113,6 +113,6 @@ class RelatedModuleViewHelper extends AbstractViewHelper
 
   protected static function getModuleByName($moduleName)
   {
-    return GeneralUtility::makeInstance(ModuleRepository::class)->findOneByModuleName($moduleName);
+    return GeneralUtility::makeInstance(ModuleRepository::class)->findOneBy(['moduleName' => $moduleName]);
   }
 }

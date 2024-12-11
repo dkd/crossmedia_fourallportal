@@ -66,8 +66,8 @@ final class EventController extends ActionController
    * @param Event|null $modifiedEvent
    * @return ResponseInterface
    * @throws InvalidQueryException
-   * @IgnoreValidation("modifiedEvent")
    */
+  #[IgnoreValidation(['argumentName' => 'modifiedEvent'])]
   public function indexAction(string $status = null, string $search = null, string $objectId = null, ?Event $modifiedEvent = null, int $currentPage = 1): ResponseInterface
   {
     $eventOptions = [
@@ -123,8 +123,8 @@ final class EventController extends ActionController
   /**
    * @param Event $event
    * @return ResponseInterface
-   * @IgnoreValidation("event")
    */
+  #[IgnoreValidation(['argumentName' => 'event'])]
   public function checkAction(Event $event): ResponseInterface
   {
     $view = $this->moduleTemplateFactory->create($this->request);

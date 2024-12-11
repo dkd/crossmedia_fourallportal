@@ -426,7 +426,7 @@ TEMPLATE;
               'to inform you that there is a possible lack of support for the returned properties that you ' .
               'should address in the code before you let it deploy to production.',
               $className
-            )
+            ), 1865166438
           );
         }
       } catch (RuntimeException $error) {
@@ -437,7 +437,7 @@ TEMPLATE;
     // Final check - if the class wasn't loaded by now, that's a fatal error.
     if (!class_exists($className, false)) {
       throw new RuntimeException(
-        sprintf('Dynamic Fourall class "%s" could not be loaded, please regenerate classes!', $className)
+        sprintf('Dynamic Fourall class "%s" could not be loaded, please regenerate classes!', $className), 2136459203
       );
     }
   }
@@ -620,7 +620,7 @@ TEMPLATE;
           $relatedModule = $fieldConfiguration['parent'];
         }
         if (!isset($modules[$relatedModule])) {
-          throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined');
+          throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined', 8646815387);
         }
         $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
         $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
@@ -643,7 +643,7 @@ TEMPLATE;
           $relatedModule = $fieldConfiguration['parent'];
         }
         if (!isset($modules[$relatedModule])) {
-          throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined');
+          throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined', 2321076760);
         }
         $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
         $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
@@ -755,7 +755,7 @@ TEMPLATE;
           'or configure the field as ignored by the mapper.',
           $fieldName,
           $fieldConfiguration['parent']
-        )
+        ), 4816263978
       );
     }
 
@@ -771,7 +771,7 @@ TEMPLATE;
           'or configure the field as ignored by the mapper.',
           $fieldName,
           $fieldConfiguration['child']
-        )
+        ), 9274744073
       );
     }
 
@@ -849,9 +849,9 @@ TEMPLATE;
     } else
     */
     if (($tca['foreign_table'] ?? null) === 'sys_file_reference') {
-      $tca = ExtensionManagementUtility::getFileFieldTCAConfig(
-        $fieldName,
-        [
+      $tca = [
+          ### !!! Watch out for fieldName different from columnName
+          'type' => 'file',
           'appearance' => [
             'createNewRelationLinkTitle' => 'LLL:EXT:frontend/Resources/Private/Language/locallang_ttc.xlf:media.addFileReference'
           ],
@@ -891,10 +891,8 @@ TEMPLATE;
           'foreign_match_fields' => [
             'fieldname' => $fieldConfiguration['field'],
             'tablenames' => $currentTableName,
-            'table_local' => 'sys_file',
-          ]
-        ]
-      );
+          ],
+      ];
     }
 
     if (!($tca['foreign_table'] ?? false) && ($tca['type'] ?? false) !== 'group') {
@@ -904,7 +902,7 @@ TEMPLATE;
           'Normally this would mean that this field should be mapped to a plain string value, but due to the ' .
           'ambiguity in target resource type, we require that you manually map or ignore this particular field.',
           $fieldConfiguration['field']
-        )
+        ), 5649592310
       );
     }
 
@@ -918,7 +916,7 @@ TEMPLATE;
   protected function validatePresenceOfConfiguredConnectorForModule($moduleName)
   {
     if (empty($this->getAllConfiguredModules()[$moduleName])) {
-      throw new UndefinedModuleException(sprintf('Module "%s" is unknown to TYPO3, make sure it is configured!', $moduleName));
+      throw new UndefinedModuleException(sprintf('Module "%s" is unknown to TYPO3, make sure it is configured!', $moduleName), 8654469181);
     }
   }
 
@@ -1236,7 +1234,7 @@ TEMPLATE;
     $requirePersist = false;
 
     /** @var Server[] $servers */
-    $servers = $this->serverRepository->findByActive(true);
+    $servers = $this->serverRepository->findBy(['active' => true]);
     foreach ($servers as $server) {
       /** @var Module[] $modules */
       $modules = $server->getModules();
@@ -1291,7 +1289,7 @@ TEMPLATE;
           $fieldName,
           GeneralUtility::underscoredToLowerCamelCase($fieldName),
           $module->getMapper()->getEntityClassName()
-        )
+        ), 1978775391
       );
     }
     return false;

@@ -58,7 +58,7 @@ class ResponseDataFieldValueReader
                     'attribute. This issue has to be addressed on the PIM system by assigning a value to the property.',
                     $fieldName,
                     $result['properties'][$fieldName][0]['dimensions']['locale']
-                )
+                ), 5482380929
             );
         }
         return $result['properties'][$fieldName]['value'] ?? $result['properties'][$fieldName] ?? null;

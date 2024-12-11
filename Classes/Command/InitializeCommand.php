@@ -97,7 +97,7 @@ class InitializeCommand extends Command
     $settings = GeneralUtility::makeInstance(ExtensionConfiguration::class)->get('fourallportal');
     if (isset($settings['servers'])) {
       foreach ($settings['servers'] as $server) {
-        $currentServer = $this->serverRepository->findOneByDomain($server['domain']);
+        $currentServer = $this->serverRepository->findOneBy(['domain' => $server['domain']]);
         if (!$currentServer) {
           $content .= 'Creating new server for ' . $server['domain'] . PHP_EOL;
           $currentServer = new Server();

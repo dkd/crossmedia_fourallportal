@@ -40,7 +40,7 @@ class NewRecordLinkViewHelper extends AbstractTagBasedViewHelper
   /**
    * Initializes the arguments
    */
-  public function initializeArguments()
+  public function initializeArguments(): void
   {
     parent::initializeArguments();
     parent::registerUniversalTagAttributes();

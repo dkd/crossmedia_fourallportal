@@ -71,7 +71,7 @@ class ComplexTypeFactory
      * @param array $match
      * @return void
      */
-    public static function createComplexTypeTemplate($type, $name, $label, $fieldName, array $match)
+    public static function createComplexTypeTemplate($type, $name, $label, $fieldName, array $match): void
     {
         $complexType = new ComplexType();
         $complexType->setType($type);
@@ -94,7 +94,7 @@ class ComplexTypeFactory
      * @param array $subMatch
      * @return void
      */
-    public static function registerComplexTypeTemplate(ComplexType $complexType, array $subMatch)
+    public static function registerComplexTypeTemplate(ComplexType $complexType, array $subMatch): void
     {
         static::$templates[] = [$complexType, $subMatch];
     }

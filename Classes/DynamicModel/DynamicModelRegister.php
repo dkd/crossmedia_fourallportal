@@ -23,7 +23,7 @@ class DynamicModelRegister
     /**
      * @param string $modelClassName
      */
-    public static function registerModelForAutomaticHandling($modelClassName)
+    public static function registerModelForAutomaticHandling($modelClassName): void
     {
         if (!in_array($modelClassName, static::$handledModelClasses)) {
             $segments = explode('\\', $modelClassName);
@@ -59,7 +59,7 @@ class DynamicModelRegister
      * @param string $column
      * @param string $type
      */
-    public static function overrideSqlType($table, $column, $type)
+    public static function overrideSqlType($table, $column, $type): void
     {
         static::$overriddenSqlTypes[$table][$column] = $type;
     }
@@ -79,7 +79,7 @@ class DynamicModelRegister
      * @param string $modelClassName
      * @param string|null $propertyName
      */
-    public static function registerLazyModelProperty($modelClassName, $propertyName = null)
+    public static function registerLazyModelProperty($modelClassName, $propertyName = null): void
     {
         $propertyName = $propertyName ?? '_all';
         static::$lazyProperties[$modelClassName][$propertyName] = $propertyName;

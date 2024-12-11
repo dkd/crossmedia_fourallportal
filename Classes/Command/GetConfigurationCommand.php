@@ -56,7 +56,7 @@ class GetConfigurationCommand extends Command
 
     if ($serverId === 0) {
       /** @var Server $server */
-      $server = $this->serverRepository->findOneByActive(true);
+      $server = $this->serverRepository->findOneBy(['active' => true]);
     } else {
       /** @var Server $server */
       $server = $this->serverRepository->findByUid($serverId);
