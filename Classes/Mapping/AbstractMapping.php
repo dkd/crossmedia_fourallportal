@@ -52,14 +52,20 @@ abstract class AbstractMapping implements MappingInterface
   protected ?Session $session = null;
   protected ?ConnectionPool $connectionPool = null;
 
-  public function __construct()
-  {
-    $this->loggingService = GeneralUtility::makeInstance(LoggingService::class);
-    $this->persistenceManager = GeneralUtility::makeInstance(PersistenceManager::class);
-    $this->accessiblePropertyMapper = GeneralUtility::makeInstance(AccessiblePropertyMapper::class);
-    $this->storageRepository = GeneralUtility::makeInstance(StorageRepository::class);
-    $this->session = GeneralUtility::makeInstance(Session::class);
-    $this->connectionPool = GeneralUtility::makeInstance(ConnectionPool::class);
+  public function __construct(
+    ?LoggingService $loggingService = null,
+    ?PersistenceManager $persistenceManager = null,
+    ?AccessiblePropertyMapper $accessiblePropertyMapper = null,
+    ?StorageRepository $storageRepository = null,
+    ?Session $session = null,
+    ?ConnectionPool $connectionPool = null
+  ) {
+    $this->loggingService = $loggingService ?? GeneralUtility::makeInstance(LoggingService::class);
+    $this->persistenceManager = $persistenceManager ?? GeneralUtility::makeInstance(PersistenceManager::class);
+    $this->accessiblePropertyMapper = $accessiblePropertyMapper ?? GeneralUtility::makeInstance(AccessiblePropertyMapper::class);
+    $this->storageRepository = $storageRepository ?? GeneralUtility::makeInstance(StorageRepository::class);
+    $this->session = $session ?? GeneralUtility::makeInstance(Session::class);
+    $this->connectionPool = $connectionPool ?? GeneralUtility::makeInstance(ConnectionPool::class);
   }
 
   /**
