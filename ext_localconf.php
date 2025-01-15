@@ -22,7 +22,7 @@ use TYPO3\CMS\Core\Core\Environment;
 
 if (!isset($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['fourallportal'])) {
   $GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['fourallportal'] = [
-    'clientConnectTimeout' => 10,
+    'clientConnectTimeout' => 20,
     'clientTransferTimeout' => 60,
     'eventDeferralTTL' => 86400,
   ];
