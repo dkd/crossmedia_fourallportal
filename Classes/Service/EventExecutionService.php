@@ -630,7 +630,9 @@ class EventExecutionService implements SingletonInterface
     if ($responseMetadata['response']) {
       $event->setResponse($responseMetadata['response']);
     }
-    $event->setPayload($responseMetadata['payload']);
+    if ($responseMetadata['payload']) {
+      $event->setPayload($responseMetadata['payload']);
+    }
     $event->setProcessing(false);
     $this->eventRepository->update($event);
     try {
