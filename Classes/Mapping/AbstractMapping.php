@@ -497,7 +497,16 @@ abstract class AbstractMapping implements MappingInterface
       $reflectionService = GeneralUtility::makeInstance(ReflectionService::class);
       $classSchema = $reflectionService->getClassSchema($object);
       $property = $classSchema->getProperty($propertyName);
-      return $property->getType();
+      if ($property->getPrimaryType()->isCollection()) {
+        $types = array_map(
+          function (\Symfony\Component\PropertyInfo\Type $type) {
+            return $type->getClassName();
+          },
+          $property->getPrimaryType()->getCollectionValueTypes()
+        );
+        return $property->getPrimaryType()->getClassName() . '<' .  implode('|', $types) . '>';
+      }
+      return $property->getPrimaryType()->getBuiltinType();
     }
 
     throw new RuntimeException('Type of property ' . $propertyName . ' on ' . get_class($object) . ' could not be determined', 8035246555);
