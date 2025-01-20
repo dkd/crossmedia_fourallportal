@@ -520,7 +520,7 @@ class EventExecutionService implements SingletonInterface
    */
   protected function getLockFilePath(): string
   {
-    return Environment::getProjectPath() . '/' . ('typo3temp/var/locks/') . 'lock_4ap_sync.lock';
+    return rtrim(Environment::getVarPath(), '/') . '/lock/lock_4ap_sync.lock';
   }
 
   /**

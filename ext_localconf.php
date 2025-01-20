@@ -95,7 +95,6 @@ MappingRegister::registerMapping(
 //}
 
 $directories = [
-  'typo3temp/var/locks',
   'typo3temp/var/logs/fourallportal',
 ];
 
