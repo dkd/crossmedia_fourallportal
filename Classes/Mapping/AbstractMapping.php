@@ -782,7 +782,7 @@ abstract class AbstractMapping implements MappingInterface
     }
 
     if ($systemLanguage) {
-      $createdObject->_setProperty('_localizedUid', (int)$existingRow['uid'] ?? $recordUid);
+      $createdObject->_setProperty('_localizedUid', (int)($existingRow['uid'] ?? $recordUid));
       $createdObject->_setProperty('_languageUid', $systemLanguage);
       $createdObject->setRemoteId($event->getObjectId());
     }
@@ -835,6 +835,7 @@ abstract class AbstractMapping implements MappingInterface
 //    $GLOBALS['TSFE']->config['sys_language_uid'] = 0;
 //    $GLOBALS['TSFE']->settingLanguage();
 
+    /** @var \Crossmedia\Fourallportal\Domain\Model\DimensionMapping[] $dimensionMappings */
     $dimensionMappings = $event->getModule()->getServer()->getDimensionMappings();
     $mappingProblemsOccurred = false;
 
@@ -845,7 +846,7 @@ abstract class AbstractMapping implements MappingInterface
       if ($dimensionMapping->getLanguage() === 0) {
         $defaultDimensionMapping = $dimensionMapping;
       } else {
-        $sysLanguageUids[] = (int)$dimensionMapping->getLanguage();
+        $sysLanguageUids[] = $dimensionMapping->getLanguage();
         $translationDimensionMappings[] = $dimensionMapping;
       }
     }
