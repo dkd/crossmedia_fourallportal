@@ -38,7 +38,7 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
    * @param string $propertyName
    * @return void
    */
-  public function setParentObjectAndProperty(AbstractEntity $object, string $propertyName): mixed
+  public function setParentObjectAndProperty(AbstractEntity $object, string $propertyName): void
   {
     $this->parentObject = $object;
     $this->propertyName = $propertyName;

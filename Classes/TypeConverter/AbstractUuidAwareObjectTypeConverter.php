@@ -44,7 +44,7 @@ abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConv
    * @param string $propertyName
    * @return void
    */
-  public function setParentObjectAndProperty(AbstractEntity $object, string $propertyName): mixed
+  public function setParentObjectAndProperty(AbstractEntity $object, string $propertyName): void
   {
     $this->parent = $object;
     $this->propertyName = $propertyName;

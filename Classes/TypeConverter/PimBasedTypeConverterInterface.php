@@ -15,5 +15,5 @@ interface PimBasedTypeConverterInterface extends TypeConverterInterface
      * @param string $propertyName
      * @return mixed
      */
-    public function setParentObjectAndProperty(AbstractEntity $object, string $propertyName): mixed;
+    public function setParentObjectAndProperty(AbstractEntity $object, string $propertyName): void;
 }
