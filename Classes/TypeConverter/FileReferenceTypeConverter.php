@@ -107,7 +107,6 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
     $referenceProperties = [
       //'pid' => $this->parentObject->getPid(),
       'tablenames' => $dataMap->getTableName(),
-      'table_local' => 'sys_file',
       'fieldname' => $fieldName,
       'uid_local' => $original[0]['uid'],
       'uid_foreign' => $this->parentObject->getUid(),
