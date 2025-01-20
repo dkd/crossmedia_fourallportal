@@ -16,6 +16,7 @@ use ReflectionException;
 use ReflectionMethod;
 use RuntimeException;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
 use TYPO3\CMS\Core\Domain\Repository\PageRepository;
 use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\TypoScript\FrontendTypoScript;
@@ -712,7 +713,7 @@ abstract class AbstractMapping implements MappingInterface
    * @return mixed
    * @throws Exception
    */
-  protected function createObject(Event $event, int $systemLanguage = 0, int $languageParentUid = 0, $existingRow = null): mixed
+  protected function createObject(Event $event, int $systemLanguage = 0, int $languageParentUid = 0, array|null $existingRow = null): mixed
   {
     if ($systemLanguage > 0 && $languageParentUid === 0) {
       throw new Exception(
@@ -910,13 +911,17 @@ abstract class AbstractMapping implements MappingInterface
 //      $GLOBALS['TSFE']->settingLanguage();
 
       $queryBuilder = $this->connectionPool->getQueryBuilderForTable($this->getTableName());
+      $queryBuilder->getRestrictions()->removeByType(HiddenRestriction::class);
       $existingRowResult = $queryBuilder->select('uid', 'l10n_parent', 'sys_language_uid')
         ->from($this->getTableName())
         ->where($queryBuilder->expr()->eq('sys_language_uid', $languageUid))
         ->andWhere($queryBuilder->expr()->eq('l10n_parent', $object->getUid()))
         ->executeQuery();
       try {
-        $existingRow = $existingRowResult->fetchOne();
+        $existingRow = $existingRowResult->fetchAssociative();
+        if (empty($existingRow)) {
+            $existingRow = null;
+        }
         $translationObject = $this->createObject($event, $languageUid, $object->getUid(), $existingRow);
         //$translationObject->setRemoteId($event->getObjectId());
         $objectMappingProblemsOccurred = $this->mapPropertiesFromDataToObject($data, $translationObject, $event->getModule(), $translationDimensionMapping);
