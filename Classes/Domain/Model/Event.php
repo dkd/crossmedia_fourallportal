@@ -2,8 +2,10 @@
 
 namespace Crossmedia\Fourallportal\Domain\Model;
 
+use Crossmedia\Fourallportal\Utility\ConstantsUtility;
 use Doctrine\DBAL\Exception;
 use PDO;
+use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
@@ -249,7 +251,17 @@ class Event extends AbstractEntity
   public function getObjectLogFilePath(): string
   {
     return sprintf(
-      'typo3temp/var/logs/fourallportal/objects/%s/%s.log',
+      implode(
+        DIRECTORY_SEPARATOR,
+        [
+          Environment::getVarPath(),
+          'log',
+          ConstantsUtility::LOG_BASEDIR,
+          'objects',
+          '%s',
+          '%s.log',
+        ]
+      ),
       $this->getModule()->getModuleName(),
       $this->getObjectId()
     );
@@ -258,7 +270,17 @@ class Event extends AbstractEntity
   public function getEventLogFilePath(): string
   {
     return sprintf(
-      'typo3temp/var/logs/fourallportal/events/%s/%s.log',
+      implode(
+        DIRECTORY_SEPARATOR,
+        [
+          Environment::getVarPath(),
+          'log',
+          ConstantsUtility::LOG_BASEDIR,
+          'events',
+          '%s',
+          '%s.log',
+        ]
+      ),
       $this->getModule()->getModuleName(),
       $this->getObjectId()
     );

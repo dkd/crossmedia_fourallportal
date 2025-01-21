@@ -10,5 +10,5 @@ class ConstantsUtility
   public final const TEXT_SCHEMA = 'schema';
   public final const TEXT_CONNECTION = 'connection';
   public final const TEXT_ERRORS = 'error';
-  public final const LOG_BASEDIR = 'typo3temp/var/logs/fourallportal/';
+  public final const LOG_BASEDIR = 'fourallportal';
 }
