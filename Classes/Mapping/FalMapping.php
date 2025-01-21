@@ -25,6 +25,7 @@ use TYPO3\CMS\Core\Resource\Exception\InsufficientFolderReadPermissionsException
 use TYPO3\CMS\Core\Resource\Exception\InsufficientFolderWritePermissionsException;
 use TYPO3\CMS\Core\Resource\Exception\InvalidFileNameException;
 use TYPO3\CMS\Core\Resource\File;
+use TYPO3\CMS\Core\Resource\Folder;
 use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Resource\FileInterface;
 use TYPO3\CMS\Core\Resource\FileRepository;
@@ -161,14 +162,14 @@ class FalMapping extends AbstractMapping
       }
       $collectedFieldNames = [];
       foreach ($config['columns'] as $columnName => $columnConfiguration) {
-        if ($columnConfiguration['config']['type'] !== 'select' && $columnConfiguration['config']['type'] !== 'group' && $columnConfiguration['config']['type'] !== 'inline') {
+        if ($columnConfiguration['config']['type'] !== 'file' && $columnConfiguration['config']['type'] !== 'select' && $columnConfiguration['config']['type'] !== 'group' && $columnConfiguration['config']['type'] !== 'inline') {
           continue;
         }
         if ($columnConfiguration['config']['type'] === 'group' && strpos($columnConfiguration['config']['allowed'], 'sys_file') === false) {
           continue;
         }
         $foreignTable = $columnConfiguration['config']['foreign_table'] ?? $columnConfiguration['config']['allowed'] ?? '';
-        if ($foreignTable === 'sys_file_reference' || $foreignTable === 'sys_file' || strpos($foreignTable, 'sys_file') !== false) {
+        if ($foreignTable === 'sys_file_reference' || $foreignTable === 'sys_file' || str_contains($foreignTable, 'sys_file')) {
           $collectedFieldNames[] = $columnName;
           $targetTables[$table][$columnName] = $foreignTable;
         }
@@ -218,7 +219,7 @@ class FalMapping extends AbstractMapping
 
   /**
    * @param array $data
-   * @param AbstractEntity $object
+   * @param AbstractEntity|File $object
    * @param Module $module
    * @param DimensionMapping|null $dimensionMapping
    * @return bool
@@ -263,7 +264,7 @@ class FalMapping extends AbstractMapping
    * @param string $objectId
    * @param array $data
    * @param Event $event
-   * @return File | FileReference
+   * @return File|FileReference|AbstractEntity
    * @throws InvalidFileNameException
    * @throws PropertyNotAccessibleException
    * @throws Exception
@@ -541,7 +542,8 @@ class FalMapping extends AbstractMapping
     return GeneralUtility::makeInstance(CharsetConverter::class);
   }
 
-  protected function searchFile(\TYPO3\CMS\Core\Resource\Folder $folder, string $filename):File|null {
+  protected function searchFile(Folder $folder, string $filename): File|null
+  {
     $file = null;
     try {
       if ($folder->hasFile($filename)) {
