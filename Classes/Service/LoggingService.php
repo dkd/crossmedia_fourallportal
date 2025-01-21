@@ -151,19 +151,26 @@ class LoggingService implements SingletonInterface
   protected function resolveLogFilePath(string $type, string $identity = null): string
   {
 
-    $fullPath = Environment::getProjectPath() . "/" .ConstantsUtility::LOG_BASEDIR;
+    $fullPath = implode(
+        DIRECTORY_SEPARATOR,
+        [
+          Environment::getVarPath(),
+          'log',
+          ConstantsUtility::LOG_BASEDIR
+        ]
+    );
 
     # Create extension log file directory
     if (isset($identity)) {
-      $fullPath .=  $type;
+      $fullPath .=  DIRECTORY_SEPARATOR . $type;
     }
     if (!is_dir($fullPath)) {
       GeneralUtility::mkdir_deep($fullPath);
     }
     if (isset($identity)) {
-      $fullPath .=  '/' . $identity . '.log';
+      $fullPath .=  DIRECTORY_SEPARATOR . $identity . '.log';
     } else {
-      $fullPath .= $type . '.log';
+      $fullPath .= DIRECTORY_SEPARATOR . $type . '.log';
     }
 
     if (!is_file($fullPath)) {

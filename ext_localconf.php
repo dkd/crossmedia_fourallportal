@@ -94,17 +94,6 @@ MappingRegister::registerMapping(
 //  );
 //}
 
-$directories = [
-  'typo3temp/var/logs/fourallportal',
-];
-
-foreach ($directories as $directory) {
-  $fullPath = Environment::getProjectPath() . '/' . $directory;
-  if (!is_dir($fullPath)) {
-    GeneralUtility::mkdir_deep($fullPath);
-  }
-}
-
 ExtensionUtility::configurePlugin('Crossmedia.Fourallportal', 'module', [
   EventController::class => ['index', 'check', 'reset', 'execute', 'sync'],
   ServerController::class => ['index', 'check', 'disable', 'enable', 'delete', 'restartSynchronisation', 'module']
