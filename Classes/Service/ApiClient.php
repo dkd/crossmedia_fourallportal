@@ -364,6 +364,15 @@ class ApiClient
 
     $this->validateResponseCode($result);
 
+    // Mask sensible information
+    if (!empty($data['username'] ?? null)) {
+        $data['username'] = '*****';
+    }
+
+    if (!empty($data['password'] ?? null)) {
+        $data['password'] = '*****';
+    }
+
     $this->loggingService->logConnectionActivity(strlen($response) . ' ApiClient.php ' . $uri . ' ' . json_encode($data));
 
     return $result;
@@ -389,7 +398,7 @@ class ApiClient
     if (!isset($result['code']) || $result['code'] != 0) {
       $message = $result['message'] ?? 'MamClient: could not communicate with mam api. please try again later';
       $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new ApiException($message . ' - Response code ' . $result['code'] . ': ' . $this->translateResponseCode($result['code']), 8133411903);
+      throw new ApiException($message . ' - Response code ' . ($result['code'] ?? 'N/A') . ': ' . $this->translateResponseCode((int)($result['code'] ?? -1)), 8133411903);
     }
     if (!is_array($result)) {
       $message = 'The MAM API returned garbage data (not JSON array)';
