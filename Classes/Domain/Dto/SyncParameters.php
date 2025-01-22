@@ -111,7 +111,7 @@ class SyncParameters
         return $this->exclude;
     }
 
-    public function setExclude($exclude): self
+    public function setExclude(array|string|null $exclude): self
     {
         if ($exclude === null || $exclude === '') {
             $this->exclude = [];
