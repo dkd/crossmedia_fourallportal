@@ -175,7 +175,7 @@ abstract class AbstractMapping implements MappingInterface
       ->where($queryBuilder->expr()->eq('remote_id', $queryBuilder->createNamedParameter($objectId)))
       ->orderBy('sys_language_uid', 'ASC')
       ->executeQuery()
-      ->fetchFirstColumn();
+      ->fetchAllAssociative();
     $defer = false;
 
     if (empty($pimRecords)) {
@@ -819,7 +819,7 @@ abstract class AbstractMapping implements MappingInterface
   protected function importObjectWithDimensionMappings(array $data, $object, Event $event): bool
   {
     $request = $this->request ?? $GLOBALS['TYPO3_REQUEST'];
-    $frontendTypoScript = $request->getAttribute('frontend.typoscript');
+    $frontendTypoScript = $request?->getAttribute('frontend.typoscript') ?? null;
     if ($frontendTypoScript instanceof FrontendTypoScript) {
       $GLOBALS['TSFE'] = $frontendTypoScript;
       $GLOBALS['TSFE']['sys_page'] = new PageRepository();
