@@ -120,8 +120,6 @@ class SyncCommand extends Command
       $this->eventExecutionService->unlock();
       $io->writeln($fakeResponse->getCollected());
     }
-
     return Command::SUCCESS;
   }
-
 }
