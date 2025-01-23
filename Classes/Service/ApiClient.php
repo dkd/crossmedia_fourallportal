@@ -395,15 +395,15 @@ class ApiClient
    */
   protected function validateResponseCode(mixed $result): void
   {
-    if (!isset($result['code']) || $result['code'] != 0) {
-      $message = $result['message'] ?? 'MamClient: could not communicate with mam api. please try again later';
-      $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
-      throw new ApiException($message . ' - Response code ' . ($result['code'] ?? 'N/A') . ': ' . $this->translateResponseCode((int)($result['code'] ?? -1)), 8133411903);
-    }
     if (!is_array($result)) {
       $message = 'The MAM API returned garbage data (not JSON array)';
       $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
       throw new ApiException($message, 9802312867);
+    }
+    if (!isset($result['code']) || (int)($result['code'] ?? -1) != 0) {
+      $message = $result['message'] ?? 'MamClient: could not communicate with mam api. please try again later';
+      $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+      throw new ApiException($message . ' - Response code ' . ($result['code'] ?? 'N/A') . ': ' . $this->translateResponseCode((int)($result['code'] ?? -1)), 8133411903);
     }
   }
 
