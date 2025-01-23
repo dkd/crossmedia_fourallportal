@@ -258,11 +258,17 @@ abstract class AbstractMapping implements MappingInterface
    */
   protected function hardDeleteRecord(string $table, array $record): void
   {
-    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($table);
+    $uid = (int)($record['uid'] ?? 0);
+    if ($uid === 0) {
+      return;
+    }
+    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+      ->getQueryBuilderForTable($table);
     $queryBuilder->getRestrictions()->removeAll();
-    $queryBuilder->delete($table)->where($queryBuilder->expr()->eq('uid', $record['uid']));
+    $queryBuilder->delete($table)
+      ->where($queryBuilder->expr()->eq('uid', $uid));
     $queryBuilder->executeQuery();
-    $message = sprintf('Record %s was deleted from table %s', $record['uid'], $table);
+    $message = sprintf('Record %s was deleted from table %s', $uid, $table);
     $this->loggingService->logObjectActivity($record['remote_id'] ?? 'unknown', $message, 'uid');
   }
 
