@@ -302,13 +302,17 @@ class EventExecutionService implements SingletonInterface
     while ($parameters->shouldContinue()) {
       if ($maxDeferredEvents > 0) {
         while ($parameters->shouldContinue() && ($events = $this->eventRepository->findDeferred($maxEvents)) && $events->count() > 0) {
-          echo 'Processing batch of ' . $events->count() . ' deferred events...' . PHP_EOL;
+          $this->response
+              ->setDescription('Processing batch of ' . $events->count() . ' deferred events...' . PHP_EOL)
+              ->send();
           $this->processEvents($parameters, $events);
         }
       }
 
       while ($parameters->shouldContinue() && ($events = $this->eventRepository->findByStatus('pending', $maxEvents, false)) && $events->count() > 0) {
-        echo 'Processing batch of ' . $events->count() . ' pending events...' . PHP_EOL;
+          $this->response
+              ->setDescription('Processing batch of ' . $events->count() . ' pending events...' . PHP_EOL)
+              ->send();
         $this->processEvents($parameters, $events);
       }
       if ($events && $events->count() === 0) {
