@@ -11,6 +11,9 @@ use Crossmedia\Fourallportal\Service\ApiClient;
 use Crossmedia\Fourallportal\ValueReader\ResponseDataFieldValueReader;
 use DateTime;
 use Doctrine\DBAL\Exception;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
+use Psr\Log\LoggerInterface;
 use ReflectionClass;
 use ReflectionException;
 use RuntimeException;
@@ -38,8 +41,10 @@ use TYPO3\CMS\Extbase\Property\Exception\InvalidSourceException;
 use TYPO3\CMS\Extbase\Property\Exception\TypeConverterException;
 use TYPO3\CMS\Extbase\Reflection\Exception\PropertyNotAccessibleException;
 
-class FalMapping extends AbstractMapping
+class FalMapping extends AbstractMapping implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
   /**
    * @var string
    */
@@ -335,7 +340,7 @@ class FalMapping extends AbstractMapping
     }
 
     if ($download) {
-//            echo 'Downloading: ' . $targetFolder . $targetFilename . PHP_EOL;
+        $this->logger?->debug('Downloading: ' . $targetFolder . $targetFilename);
       try {
         $tempPathAndFilename = $client->saveDerivate($tempPathAndFilename, $event->getObjectId(), $event->getModule()->getUsageFlag());
         $contents = file_get_contents($tempPathAndFilename);
@@ -378,7 +383,7 @@ class FalMapping extends AbstractMapping
       $file->updateProperties(['modification_date' => $remoteModificationTime]);
       $file->setContents($contents);
     } else {
-      echo 'Skipping: ' . $targetFolder . $targetFilename . PHP_EOL;
+        $this->logger?->info('Skipping: ' . $targetFolder . $targetFilename);
     }
 
     if (!$file) {
@@ -498,6 +503,10 @@ class FalMapping extends AbstractMapping
                         </p>
                     ', $ids[0]);
         } else {
+            /*
+             * The downloaded file is used to generate a preview image within the backend
+             * The source file can be of any type
+             */
           $publicTempFile = 'typo3/typo3temp/assets/images/' . basename($temporaryFile);
           rename($temporaryFile, $publicTempFile);
           $temporaryFileRelativePath = substr($publicTempFile, strlen('typo3/') - 1);
@@ -550,7 +559,7 @@ class FalMapping extends AbstractMapping
         $file = $folder->getFile($filename);
       }
     } catch (Exception $e) {
-      // Optional: Logging der Fehler
+        $this->logger?->error('Search for "' . $filename . '" failed with exception: ' . $e->getMessage());
       return null;
     }
     return $file;
