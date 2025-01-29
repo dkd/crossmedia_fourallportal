@@ -240,7 +240,7 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
     if ($object instanceof File) {
       $metadata = [];
       $map = MappingRegister::resolvePropertyMapForMapper(static::class);
-      $fieldValueReader = new ResponseDataFieldValueReader();
+      $fieldValueReader = GeneralUtility::makeInstance(ResponseDataFieldValueReader::class);
       $dimensionMapping = $dimensionMapping ?? $module->getServer()->getDimensionMappings()->current();
 
       foreach ($data['result'][0]['properties'] as $propertyName => $propertyValue) {
@@ -282,7 +282,7 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
   protected function downloadFileAndGetFileObject(string $objectId, array $data, Event $event): File|FileReference|AbstractEntity
   {
     $dimensionMapping = $event->getModule()->getServer()->getDimensionMappings()->current();
-    $fieldValueReader = new ResponseDataFieldValueReader();
+    $fieldValueReader = GeneralUtility::makeInstance(ResponseDataFieldValueReader::class);
 
     $originalFullFileName = $fieldValueReader->readResponseDataField($data['result'][0], 'name', $dimensionMapping);
 

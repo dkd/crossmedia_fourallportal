@@ -4,10 +4,14 @@ declare(strict_types=1);
 namespace Crossmedia\Fourallportal\ValueReader;
 
 use Crossmedia\Fourallportal\Domain\Model\DimensionMapping;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Extbase\Reflection\Exception\PropertyNotAccessibleException;
 
-class ResponseDataFieldValueReader
+class ResponseDataFieldValueReader implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     public function readResponseDataField(array $result, string $fieldName, DimensionMapping $dimensionMapping = null)
     {
         if (is_array($result['properties'][$fieldName] ?? false)
@@ -34,7 +38,7 @@ class ResponseDataFieldValueReader
                 }
 
                 throw new PropertyNotAccessibleException(
-                    'Cannot read property ' . $fieldName . ' from PIM response. ' .
+                    'Cannot read property "' . $fieldName . '" from PIM response. ' .
                     sprintf(
                         'Dimension mapping is in effect but data set has no dimensioned data which matches %s.',
                         json_encode($errorData)
@@ -43,12 +47,11 @@ class ResponseDataFieldValueReader
                 );
             }
 
+            $this->logger?->warning('Missing property "' . $fieldName . '" in data: ' . json_encode($result['properties'] ?? []));
             throw new PropertyNotAccessibleException(
-                'Cannot read property ' . $fieldName . ' from PIM response. Dimension mapping is NOT in effect but property contains dimensions.',
+                'Cannot read property "' . $fieldName . '" from PIM response. Dimension mapping is NOT in effect but property contains dimensions.',
                 1527168391
             );
-
-
         } elseif (is_array($result['properties'][$fieldName][0] ?? false)
             && isset($result['properties'][$fieldName][0]['dimensions'])
         ) {

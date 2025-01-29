@@ -299,7 +299,7 @@ abstract class AbstractMapping implements MappingInterface
     }
     $map = MappingRegister::resolvePropertyMapForMapper(static::class);
     $properties = $data['result'][0]['properties'];
-    $responseValueReader = new ResponseDataFieldValueReader();
+    $responseValueReader = GeneralUtility::makeInstance(ResponseDataFieldValueReader::class);
     $properties = $this->addMissingNullProperties($properties, $module);
     $mappingProblemsOccurred = false;
     $objectId = $object->getUid();
