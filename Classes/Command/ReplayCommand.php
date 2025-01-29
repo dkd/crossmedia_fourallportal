@@ -2,7 +2,7 @@
 
 namespace Crossmedia\Fourallportal\Command;
 
-use Crossmedia\Fourallportal\Response\CollectingResponse;
+use Crossmedia\Fourallportal\Response\ConsoleResponse;
 use Crossmedia\Fourallportal\Service\EventExecutionService;
 use Doctrine\DBAL\Exception;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -62,11 +62,10 @@ class ReplayCommand extends Command
     $events = (int)$input->getArgument('events');
     $objectId = $input->getArgument('objectId');
 
-    $fakeResponse = new CollectingResponse();
-    $this->eventExecutionService->setResponse($fakeResponse);
+    $consoleResponse = new ConsoleResponse($io);
+    $this->eventExecutionService->setResponse($consoleResponse);
     $this->eventExecutionService->replay($events, $module, $objectId);
 
-    $io->writeln($fakeResponse->getCollected());
     return Command::SUCCESS;
   }
 

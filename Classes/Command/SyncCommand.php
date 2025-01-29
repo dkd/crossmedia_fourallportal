@@ -3,7 +3,7 @@
 namespace Crossmedia\Fourallportal\Command;
 
 use Crossmedia\Fourallportal\Domain\Dto\SyncParameters;
-use Crossmedia\Fourallportal\Response\CollectingResponse;
+use Crossmedia\Fourallportal\Response\ConsoleResponse;
 use Crossmedia\Fourallportal\Service\EventExecutionService;
 use Doctrine\DBAL\Exception;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -141,14 +141,12 @@ class SyncCommand extends Command
             ->setEventLimit($maxEvents)
             ->setTimeLimit($maxTime);
 
-        $fakeResponse = new CollectingResponse();
-        $this->eventExecutionService->setResponse($fakeResponse);
+        $consoleResponse = new ConsoleResponse($io);
+        $this->eventExecutionService->setResponse($consoleResponse);
         $this->eventExecutionService->sync($syncParameters);
-        $io->writeln($fakeResponse->getCollected());
 
         if (!$force && $sync) {
             $this->eventExecutionService->unlock();
-            $io->writeln($fakeResponse->getCollected());
         }
 
         return Command::SUCCESS;
