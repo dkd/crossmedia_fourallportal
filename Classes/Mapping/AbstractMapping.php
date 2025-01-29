@@ -17,6 +17,7 @@ use ReflectionMethod;
 use RuntimeException;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
+use TYPO3\CMS\Core\DataHandling\DataHandler;
 use TYPO3\CMS\Core\Domain\Repository\PageRepository;
 use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\TypoScript\FrontendTypoScript;
@@ -262,12 +263,17 @@ abstract class AbstractMapping implements MappingInterface
     if ($uid === 0) {
       return;
     }
-    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
-      ->getQueryBuilderForTable($table);
-    $queryBuilder->getRestrictions()->removeAll();
-    $queryBuilder->delete($table)
-      ->where($queryBuilder->expr()->eq('uid', $uid));
-    $queryBuilder->executeQuery();
+    /*
+     * Use TYPO3 to delete the record. This will handle everything
+     */
+      $dataHandler = GeneralUtility::makeInstance(DataHandler::class);
+      $dataHandler->start([], []);
+      $dataHandler->deleteRecord(
+          $table,
+          $uid,
+          true,
+          true
+      );
     $message = sprintf('Record %s was deleted from table %s', $uid, $table);
     $this->loggingService->logObjectActivity($record['remote_id'] ?? 'unknown', $message, 'uid');
   }
