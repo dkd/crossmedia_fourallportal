@@ -12,7 +12,10 @@ use Crossmedia\Fourallportal\Domain\Repository\ServerRepository;
 use Crossmedia\Fourallportal\Error\ApiException;
 use Crossmedia\Fourallportal\Mapping\DeferralException;
 use Crossmedia\Fourallportal\Response\CollectingResponse;
+use Crossmedia\Fourallportal\Response\ResponseInterface;
 use Exception;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationExtensionNotConfiguredException;
 use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationPathDoesNotExistException;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
@@ -29,9 +32,11 @@ use TYPO3\CMS\Scheduler\Domain\Repository\SchedulerTaskRepository;
 use TYPO3\CMS\Scheduler\Task\ExecuteSchedulableCommandTask;
 use TYPO3\CMS\Core\Core\Environment;
 
-class EventExecutionService implements SingletonInterface
+class EventExecutionService implements SingletonInterface, LoggerAwareInterface
 {
-  protected CollectingResponse $response;
+    use LoggerAwareTrait;
+
+  protected ResponseInterface $response;
 
   /**
    * @param ServerRepository|null $serverRepository
@@ -58,10 +63,10 @@ class EventExecutionService implements SingletonInterface
   }
 
   /**
-   * @param CollectingResponse $response
+   * @param ResponseInterface $response
    * @return void
    */
-  public function setResponse(CollectingResponse $response): void
+  public function setResponse(ResponseInterface $response): void
   {
     $this->response = $response;
   }
@@ -178,6 +183,7 @@ class EventExecutionService implements SingletonInterface
         $connection->executeQuery('SET FOREIGN_KEY_CHECKS=1');
         $connection->commit();
       } catch (\Exception $e) {
+        $this->logger?->error('Truncate of table "' . $tableName . '" failed with exception: ' . $e->getMessage());
         $connection->rollback();
       }
     }
