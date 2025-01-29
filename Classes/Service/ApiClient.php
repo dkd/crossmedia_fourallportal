@@ -396,7 +396,7 @@ class ApiClient
   protected function validateResponseCode(mixed $result): void
   {
     if (!is_array($result)) {
-      $message = 'The MAM API returned garbage data (not JSON array)';
+      $message = 'The MAM API returned garbage data. Expected JSON array, got "' . gettype($result) . '"';
       $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
       throw new ApiException($message, 9802312867);
     }
@@ -472,7 +472,7 @@ class ApiClient
   {
     $response = static::$lastResponse;
     $response['headers'] = trim(implode('', $response['headers'] ?? []));
-    $decoded = json_decode($response['response'], true);
+    $decoded = json_decode($response['response'] ?? '', true);
     if ($decoded) {
       $response['response'] = json_encode($decoded, JSON_PRETTY_PRINT);
     }
