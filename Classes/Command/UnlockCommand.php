@@ -2,7 +2,7 @@
 
 namespace Crossmedia\Fourallportal\Command;
 
-use Crossmedia\Fourallportal\Response\CollectingResponse;
+use Crossmedia\Fourallportal\Response\ConsoleResponse;
 use Crossmedia\Fourallportal\Service\EventExecutionService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -50,12 +50,10 @@ class UnlockCommand extends Command
 
     $requiredAge = (integer)$input->getArgument('requiredAge');
 
-    $fakeResponse = new CollectingResponse();
-    $this->eventExecutionService->setResponse($fakeResponse);
+    $consoleResponse = new ConsoleResponse($io);
+    $this->eventExecutionService->setResponse($consoleResponse);
     $this->eventExecutionService->unlock($requiredAge);
 
-    $io->writeln($fakeResponse->getCollected());
     return Command::SUCCESS;
   }
-
 }
