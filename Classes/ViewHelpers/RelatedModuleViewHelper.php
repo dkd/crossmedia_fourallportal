@@ -71,7 +71,8 @@ class RelatedModuleViewHelper extends AbstractViewHelper
 
     try {
       // Make an attempt with the FIRST configured dimension mapping enabled. The first entry SHOULD always be the default language.
-      $fieldValue = (new ResponseDataFieldValueReader())->readResponseDataField($response['result'][0], $field, $module->getServer()->getDimensionMappings()->current());
+      $fieldValue = GeneralUtility::makeInstance(ResponseDataFieldValueReader::class)
+          ->readResponseDataField($response['result'][0], $field, $module->getServer()->getDimensionMappings()->current());
       if ($fieldValue != null) {
         $relations = ['result' => (array)$fieldValue];
         if ($arguments['verifyRelations']) {
