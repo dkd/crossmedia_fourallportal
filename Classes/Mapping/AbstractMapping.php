@@ -66,8 +66,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
         ?StorageRepository        $storageRepository = null,
         ?Session                  $session = null,
         ?ConnectionPool           $connectionPool = null
-    )
-    {
+    ) {
         $this->loggingService = $loggingService ?? GeneralUtility::makeInstance(LoggingService::class);
         $this->persistenceManager = $persistenceManager ?? GeneralUtility::makeInstance(PersistenceManager::class);
         $this->accessiblePropertyMapper = $accessiblePropertyMapper ?? GeneralUtility::makeInstance(AccessiblePropertyMapper::class);
@@ -247,13 +246,16 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
      */
     protected function updateRecord(string $table, array $record): void
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($table);
-        $queryBuilder->getRestrictions()->removeAll();
-        $query = $queryBuilder->update($table)->where($queryBuilder->expr()->eq('uid', $record['uid']));
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+            ->getQueryBuilderForTable($table);
+        $queryBuilder->getRestrictions()
+            ->removeAll();
+        $query = $queryBuilder->update($table)
+            ->where($queryBuilder->expr()->eq('uid', $record['uid']));
         foreach ($record as $key => $value) {
             $query->set($key, $value);
         }
-        $query->executeQuery();
+        $query->executeStatement();
         $message = sprintf('Record %s from table %s was updated', $record['uid'], $table);
         $this->loggingService->logObjectActivity($record['remote_id'] ?? 'unknown', $message, 'uid');
     }
