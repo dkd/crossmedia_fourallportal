@@ -551,16 +551,11 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     $this->response->setDescription(
       'Processing ' . $event->getStatus() . ' event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '" - ' .
       $event->getEventType() . ' ' . $event->getObjectId() . PHP_EOL
-    );
+    )->send();
 
     $event->setProcessing(true);
-
-    if (method_exists($this->response, 'send')) {
-      $this->response->send();
-    }
     $client = $event->getModule()->getServer()->getClient();
     try {
-
       $mapper = $event->getModule()->getMapper();
       $responseData = [];
       if ($event->getEventType() !== 'delete') {
@@ -620,7 +615,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         $event->setStatus('failed');
       }
       $this->loggingService->logEventActivity($event, 'Event was deferred', 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
-    } catch (Exception $exception) {
+    } catch (\Throwable $exception) {
       $event->setStatus('failed');
       $event->setRetries(0);
       $event->setMessage($exception->getMessage() . ' (code: ' . $exception->getCode() . ')' . $exception->getFile() . ':' . $exception->getLine());
