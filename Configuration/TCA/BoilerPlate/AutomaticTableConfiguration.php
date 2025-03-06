@@ -4,7 +4,6 @@ return [
         'label_alt' => 'remote_id',
         'tstamp' => 'tstamp',
         'crdate' => 'crdate',
-        'dividers2tabs' => true,
         'versioningWS' => false,
         'languageField' => 'sys_language_uid',
         'transOrigPointerField' => 'l10n_parent',
