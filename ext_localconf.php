@@ -12,9 +12,11 @@ use Crossmedia\Fourallportal\Log\SystemLogDatabaseWriter;
 use Crossmedia\Fourallportal\Mapping\FalMapping;
 use Crossmedia\Fourallportal\Mapping\MappingRegister;
 use Psr\Log\LogLevel as LogLevelAlias;
-use TYPO3\CMS\Extbase\Utility\ExtensionUtility;
-use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Cache\Backend\SimpleFileBackend;
+use TYPO3\CMS\Core\Cache\Frontend\PhpFrontend;
 use TYPO3\CMS\Core\Core\Environment;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Utility\ExtensionUtility;
 
 //$backendConfiguration = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(
 //  \TYPO3\CMS\Core\Configuration\ExtensionConfiguration::class
@@ -41,9 +43,6 @@ $GLOBALS['TYPO3_CONF_VARS']['LOG']['Crossmedia']['Fourallportal']['writerConfigu
     ],
   ],
 ];
-
-// TODO: should use Symfony
-//$GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['extbase']['commandControllers'][$_EXTKEY] = \Crossmedia\Fourallportal\Command\FourallportalCommandController::class;
 
 MappingRegister::registerMapping(
   FalMapping::class,
@@ -84,15 +83,15 @@ MappingRegister::registerMapping(
   ]
 );
 
-//if (!is_array($GLOBALS['TYPO3_CONF_VARS']['SYS']['caching']['cacheConfigurations']['fourallportal_classes'])) {
-//  $GLOBALS['TYPO3_CONF_VARS']['SYS']['caching']['cacheConfigurations']['fourallportal_classes'] = array(
-//    'frontend' => PhpFrontend::class,
-//    'backend' => SimpleFileBackend::class,
-//    'options' => [
-//      'defaultLifetime' => 9999999999, // Entries in this cache have extremely long life and won't auto-expire
-//    ],
-//  );
-//}
+if (!isset($GLOBALS['TYPO3_CONF_VARS']['SYS']['caching']['cacheConfigurations']['fourallportal_classes'])) {
+  $GLOBALS['TYPO3_CONF_VARS']['SYS']['caching']['cacheConfigurations']['fourallportal_classes'] = [
+    'frontend' => PhpFrontend::class,
+    'backend' => SimpleFileBackend::class,
+    'options' => [
+      'defaultLifetime' => 9999999999, // Entries in this cache have extremely long life and won't auto-expire
+    ],
+  ];
+}
 
 ExtensionUtility::configurePlugin('Crossmedia.Fourallportal', 'module', [
   EventController::class => ['index', 'check', 'reset', 'execute', 'sync'],

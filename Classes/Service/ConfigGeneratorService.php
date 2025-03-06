@@ -3,8 +3,8 @@
 namespace Crossmedia\Fourallportal\Service;
 
 use Crossmedia\Fourallportal\DynamicModel\DynamicModelGenerator;
-use Crossmedia\Fourallportal\DynamicModel\DynamicModelRegister;
 use Crossmedia\Fourallportal\Error\ApiException;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -15,12 +15,20 @@ use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapper;
 
 class ConfigGeneratorService
 {
+  private OutputInterface|null $output = null;
 
   public function __construct(
     protected ?DataMapper            $dataMapper = null,
     protected ?DynamicModelGenerator $dynamicModelGenerator = null
-  )
+  ) {
+  }
+
+  public function setOutputInterface(OutputInterface $output): void
   {
+      $this->output = $output;
+      if ($this->dynamicModelGenerator !== null) {
+          $this->dynamicModelGenerator->setOutputInterface($this->output);
+      }
   }
 
   /**
@@ -44,7 +52,7 @@ class ConfigGeneratorService
    * @param bool $readOnly If TRUE, generates TCA fields as read-only
    * @throws Exception
    */
-  public function generateTableConfiguration($entityClassName = null, $readOnly = false): void
+  public function generateTableConfiguration(string|null $entityClassName = null, bool $readOnly = false): void
   {
     foreach ($this->getEntityClassNames($entityClassName) as $entityClassName) {
       $tca = $this->dynamicModelGenerator->generateAutomaticTableConfigurationForModelClassName($entityClassName, $readOnly);
@@ -82,7 +90,7 @@ class ConfigGeneratorService
    * @throws IllegalObjectTypeException
    * @throws UnknownObjectException
    */
-  public function generateAbstractModelClassCommand(SymfonyStyle $io, $entityClassName = null, $strict = false): void
+  public function generateAbstractModelClassCommand(SymfonyStyle $io, string|null $entityClassName = null, bool $strict = false): void
   {
     $modulesByEntityClassName = [];
     foreach ($this->dynamicModelGenerator->getAllConfiguredModules() as $module) {
@@ -92,6 +100,7 @@ class ConfigGeneratorService
     }
 
     foreach ($this->getEntityClassNames($entityClassName) as $entityClassName) {
+      $entityClassName = ltrim($entityClassName, '\\');
       if (!isset($modulesByEntityClassName[$entityClassName])) {
         $io->writeln('Cannot generate model for ' . $entityClassName . ' - has no configured module to handle the entity' . PHP_EOL);
         continue;
@@ -154,7 +163,7 @@ class ConfigGeneratorService
    * @param string $entityClassName
    * @return array
    */
-  protected function getEntityClassNames($entityClassName)
+  protected function getEntityClassNames(string|null $entityClassName)
   {
     if ($entityClassName) {
       $entityClassNames = [$entityClassName];

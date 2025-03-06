@@ -23,8 +23,7 @@ class GenerateCommand extends Command
 
   public function __construct(
     protected ?ConfigGeneratorService $configGeneratorService = null
-  )
-  {
+  ) {
     parent::__construct();
   }
 
@@ -33,7 +32,7 @@ class GenerateCommand extends Command
     $this
       ->setDescription('Generates all configuration')
       ->setHelp("Generates all configuration\n\n Shortcut method for calling all of the three specific\n generate commands to generate static configuration files for\n all dynamic-model-enabled modules' entities.")
-      ->addArgument('entityClassName', InputArgument::REQUIRED, 'entityClassName')
+      ->addArgument('entityClassName', InputArgument::REQUIRED, 'Name of the entity class. Use two back slashes on the command line')
       ->addArgument('strict', InputArgument::OPTIONAL, 'If TRUE, generates strict PHP code', false)
       ->addArgument('readOnly', InputArgument::OPTIONAL, 'If TRUE, generates TCA fields as read-only', false);
   }
@@ -62,6 +61,7 @@ class GenerateCommand extends Command
     $strict = (bool)$input->getArgument('strict');
     $readOnly = (bool)$input->getArgument('readOnly');
 
+    $this->configGeneratorService->setOutputInterface($output);
     $this->configGeneratorService->generateSqlSchemaCommand();
     $this->configGeneratorService->generateTableConfiguration($entityClassName, $readOnly);
     $this->configGeneratorService->generateAbstractModelClassCommand($io, $entityClassName, $strict);

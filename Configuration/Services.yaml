@@ -13,6 +13,16 @@ services:
     arguments:
       $identifier: 'fourallportal_classes'
 
+  Crossmedia\Fourallportal\Domain\:
+    resource: '../Classes/Domain/*'
+    exclude:
+      - '../Classes/Domain/Dto/*'
+      - '../Classes/Domain/Model/*'
+    public: true
+
+  Crossmedia\Fourallportal\DynamicModel\DynamicModelGenerator:
+    public: true
+
   Crossmedia\Fourallportal\TypeConverter\FileReferenceTypeConverter:
     tags:
       - name: extbase.type_converter
