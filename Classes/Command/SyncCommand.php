@@ -25,7 +25,6 @@ use TYPO3\CMS\Extbase\Persistence\Exception\UnknownObjectException;
 )]
 class SyncCommand extends Command
 {
-
     public function __construct(
         protected ?EventExecutionService $eventExecutionService = null,
         protected ?ConnectionPool $connectionPool = null,
@@ -73,17 +72,7 @@ class SyncCommand extends Command
     }
 
     /**
-     * Sync data
-     *
-     * Execute this to synchronise events from the PIM API.
-     *
-     * @param InputInterface $input
-     * @param OutputInterface $output
-     * @return int|void
-     * @throws Exception
-     * @throws IllegalObjectTypeException
-     * @throws InvalidQueryException
-     * @throws UnknownObjectException
+     * {@inheritDoc}
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {

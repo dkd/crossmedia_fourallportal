@@ -12,48 +12,39 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
-  name: 'fourallportal:unlock',
-  description: 'Unlock sync'
+    name: 'fourallportal:unlock',
+    description: 'Unlock sync'
 )]
 class UnlockCommand extends Command
 {
+    public function __construct(
+        protected ?EventExecutionService $eventExecutionService = null
+    ) {
+        parent::__construct();
+    }
 
-  public function __construct(
-    protected ?EventExecutionService $eventExecutionService = null
-  )
-  {
-    parent::__construct();
-  }
+    protected function configure()
+    {
+        $this
+            ->setDescription("Unlock sync")
+            ->setHelp("Removes a (stale) lock.")
+            ->addArgument('requiredAge', InputArgument::OPTIONAL, 'Number of seconds, required minimum age of the lock file before removal will be allowed', 0);
+    }
 
-  protected function configure()
-  {
-    $this
-      ->setDescription("Unlock sync")
-      ->setHelp("Removes a (stale) lock.")
-      ->addArgument('requiredAge', InputArgument::OPTIONAL, 'Number of seconds, required minimum age of the lock file before removal will be allowed', 0);
-  }
+    /**
+     * {@inheritDoc}
+     */
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
+        $io = new SymfonyStyle($input, $output);
+        $io->title($this->getDescription());
 
-  /**
-   * Unlock sync
-   *
-   * Removes a (stale) lock.
-   *
-   * @param InputInterface $input
-   * @param OutputInterface $output
-   * @return int
-   * @throws \Doctrine\DBAL\Exception
-   */
-  protected function execute(InputInterface $input, OutputInterface $output)
-  {
-    $io = new SymfonyStyle($input, $output);
-    $io->title($this->getDescription());
+        $requiredAge = (integer)$input->getArgument('requiredAge');
 
-    $requiredAge = (integer)$input->getArgument('requiredAge');
+        $consoleResponse = new ConsoleResponse($io);
+        $this->eventExecutionService->setResponse($consoleResponse);
+        $this->eventExecutionService->unlock($requiredAge);
 
-    $consoleResponse = new ConsoleResponse($io);
-    $this->eventExecutionService->setResponse($consoleResponse);
-    $this->eventExecutionService->unlock($requiredAge);
-
-    return Command::SUCCESS;
-  }
+        return Command::SUCCESS;
+    }
 }
