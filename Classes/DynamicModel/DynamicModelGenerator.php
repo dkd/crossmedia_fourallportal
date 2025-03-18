@@ -66,7 +66,7 @@ TEMPLATE;
         return \$this->%s;
     }
 
-    public function set%s(%s%s)
+    public function set%s(%s%s)%s
     {
         \$this->%s = %s;
     }
@@ -275,7 +275,6 @@ TEMPLATE;
     $additionalColumnNames = implode(',', array_keys($additionalColumns));
     $detectedIconFile = static::findIconFile($extensionKey, $tableName);
     $tca['columns'] = array_replace($additionalColumns, $tca['columns']);
-    $tca['interface']['showRecordFieldList'] .= ',' . $additionalColumnNames;
     $tca['types']['1']['showitem'] .= ',' . $additionalColumnNames;
     $tca['columns']['l10n_parent']['config']['foreign_table'] = $tableName;
     $tca['columns']['l10n_parent']['config']['foreign_table_where'] = str_replace(
@@ -545,7 +544,9 @@ TEMPLATE;
       //$fieldName = $this->resolveFieldName($fieldConfiguration);
       $fieldName = $originalName;
       $propertyName = GeneralUtility::underscoredToLowerCamelCase($fieldName);
-      $this->output?->writeln('Generating: ' . $module->getModuleName() . '->' . $entityClassName . '->' . $propertyName);
+      if ($this->output?->isVerbose() ?? false) {
+          $this->output?->writeln('Generating: ' . $module->getModuleName() . '->' . $entityClassName . '->' . $propertyName);
+      }
 
       try {
         if ($this->isSkippedField($module, $originalName, $fieldConfiguration, $validModuleNames)) {
@@ -553,8 +554,9 @@ TEMPLATE;
         }
 
         list ($type, $schema, $tca) = $this->guessLocalTypesFromRemoteField($originalName, $fieldConfiguration, $module->getModuleName());
-
-          $this->output?->writeln('(' . $fieldConfiguration['type'] . ', ' . $type . ', ' . $schema . ')');
+          if ($this->output?->isVerbose() ?? false) {
+            $this->output?->writeln('(' . $fieldConfiguration['type'] . ', ' . $type . ', ' . $schema . ')');
+          }
 
         $properties[$propertyName] = [
           'column' => $fieldName,
@@ -1080,10 +1082,10 @@ TEMPLATE;
         $upperCasePropertyName,
         '',
         $propertyName . ($isLazySingleObjectRelation ? ' instanceof LazyLoadingProxy ? $this->' . $propertyName . '->_loadRealInstance() : $this->' . $propertyName : ''),
-        $returnType,
-        '$' . $propertyName,
         $upperCasePropertyName,
+        '',
         '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
+        '',
         $propertyName,
         '$' . $propertyName,
         $virtualArrayGetter
@@ -1097,8 +1099,8 @@ TEMPLATE;
     $this->registerUseStatement($parentClass, 'ParentClass');
     $classSourceCode = sprintf(
       self::CLASS_TEMPLATE,
-      $namespace,
       '',
+      $namespace,
       $this->getUseStatements(),
       $classShortName,
       'ParentClass',
@@ -1179,6 +1181,7 @@ TEMPLATE;
         $upperCasePropertyName,
         $returnType ? $this->properties[$propertyName]['strictTypes'] . ' ' : '',
         '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
+        ': void',
         $propertyName,
         '$' . $propertyName,
         $virtualArrayGetter
@@ -1192,7 +1195,7 @@ TEMPLATE;
     $this->registerUseStatement($parentClass, 'ParentClass');
 
     $classSourceCode = sprintf(
-        self::CLASS_TEMPLATE,
+      self::CLASS_TEMPLATE,
       PHP_EOL . 'declare(strict_types=1);' . PHP_EOL,
       $namespace,
       $this->getUseStatements(),
