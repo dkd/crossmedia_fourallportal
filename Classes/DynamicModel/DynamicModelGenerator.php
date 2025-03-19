@@ -78,33 +78,34 @@ TEMPLATE;
     protected const RELATION_TYPE_MULTI = 3;
 
     protected array $automaticSchemaColumns = [
-    'uid INT(11) NOT NULL auto_increment',
-    'pid INT(11) DEFAULT \'0\' NOT NULL',
-    'tstamp INT(11) unsigned DEFAULT \'0\' NOT NULL',
-    'crdate INT(11) unsigned DEFAULT \'0\' NOT NULL',
-    'deleted TINYINT(4) unsigned DEFAULT \'0\' NOT NULL',
-    't3ver_oid INT(11) DEFAULT \'0\' NOT NULL',
-    't3ver_id INT(11) DEFAULT \'0\' NOT NULL',
-    't3ver_wsid INT(11) DEFAULT \'0\' NOT NULL',
-    't3ver_label VARCHAR(255) DEFAULT \'\' NOT NULL',
-    't3ver_state TINYINT(4) DEFAULT \'0\' NOT NULL',
-    't3ver_stage INT(11) DEFAULT \'0\' NOT NULL',
-    't3ver_count INT(11) DEFAULT \'0\' NOT NULL',
-    't3ver_tstamp INT(11) DEFAULT \'0\' NOT NULL',
-    't3ver_move_id INT(11) DEFAULT \'0\' NOT NULL',
-    'sys_language_uid INT(11) DEFAULT \'0\' NOT NULL',
-    'l10n_state TEXT DEFAULT NULL',
-    'l10n_parent INT(11) DEFAULT \'0\' NOT NULL',
-    'l10n_diffsource mediumblob',
-    'remote_id varchar(64) DEFAULT \'\' NOT NULL',
-  ];
-  protected array $automaticSchemaKeys = [
-    'PRIMARY KEY (uid)',
-    'KEY parent (pid)',
-    'KEY remote_id (remote_id)',
-    'KEY t3ver_oid (t3ver_oid,t3ver_wsid)',
-    'KEY language (l10n_parent,sys_language_uid)',
-  ];
+        'uid INT(11) NOT NULL auto_increment',
+        'pid INT(11) DEFAULT \'0\' NOT NULL',
+        'tstamp INT(11) unsigned DEFAULT \'0\' NOT NULL',
+        'crdate INT(11) unsigned DEFAULT \'0\' NOT NULL',
+        'deleted TINYINT(4) unsigned DEFAULT \'0\' NOT NULL',
+        't3ver_oid INT(11) DEFAULT \'0\' NOT NULL',
+        't3ver_id INT(11) DEFAULT \'0\' NOT NULL',
+        't3ver_wsid INT(11) DEFAULT \'0\' NOT NULL',
+        't3ver_label VARCHAR(255) DEFAULT \'\' NOT NULL',
+        't3ver_state TINYINT(4) DEFAULT \'0\' NOT NULL',
+        't3ver_stage INT(11) DEFAULT \'0\' NOT NULL',
+        't3ver_count INT(11) DEFAULT \'0\' NOT NULL',
+        't3ver_tstamp INT(11) DEFAULT \'0\' NOT NULL',
+        't3ver_move_id INT(11) DEFAULT \'0\' NOT NULL',
+        'sys_language_uid INT(11) DEFAULT \'0\' NOT NULL',
+        'l10n_state TEXT DEFAULT NULL',
+        'l10n_parent INT(11) DEFAULT \'0\' NOT NULL',
+        'l10n_diffsource mediumblob',
+        'remote_id varchar(64) DEFAULT \'\' NOT NULL',
+    ];
+    protected array $automaticSchemaKeys = [
+        'PRIMARY KEY (uid)',
+        'KEY parent (pid)',
+        'KEY remote_id (remote_id)',
+        'KEY t3ver_oid (t3ver_oid,t3ver_wsid)',
+        'KEY language (l10n_parent,sys_language_uid)',
+    ];
+
     /**
      * @var array<string, string>
      */
@@ -204,33 +205,6 @@ TEMPLATE;
     }
 
     return $sqlString;
-  }
-
-  /**
-   * @param array $sqlString
-   * @return array
-   */
-  public function addSchemasForAllModules(array $sqlString): array
-  {
-    $staticSchemasFromExtensions = [];
-    $schemaFromModules = [];
-    foreach (DynamicModelRegister::getModelClassNamesRegisteredForAutomaticHandling() as $entityClassName) {
-      $entityClassNameParts = explode('\\', $entityClassName);
-      $entityClassNameBase = array_slice($entityClassNameParts, 0, -3);
-      $extensionName = array_pop($entityClassNameBase);
-      $extensionKey = GeneralUtility::camelCaseToLowerCaseUnderscored($extensionName);
-      if (!isset($staticSchemasFromExtensions[$extensionKey])) {
-        $possibleSchemaFile = ExtensionManagementUtility::extPath($extensionKey) . 'Configuration/SQL/DynamicSchema.sql';
-        if (is_file($possibleSchemaFile)) {
-          $staticSchemasFromExtensions[$extensionKey] = file_get_contents($possibleSchemaFile);
-        }
-      }
-    }
-    return array_merge(
-      $sqlString,
-      $schemaFromModules,
-      $staticSchemasFromExtensions
-    );
   }
 
   /**

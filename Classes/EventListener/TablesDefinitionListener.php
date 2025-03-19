@@ -4,18 +4,14 @@ declare(strict_types=1);
 
 namespace Crossmedia\Fourallportal\EventListener;
 
-use Crossmedia\Fourallportal\DynamicModel\DynamicModelGenerator;
+use Crossmedia\Fourallportal\Utility\DynamicModelUtility;
 use TYPO3\CMS\Core\Database\Event\AlterTableDefinitionStatementsEvent;
 
 final class TablesDefinitionListener
 {
-  public function __construct(protected DynamicModelGenerator $modelGenerator)
-  {
-  }
-
   public function __invoke(AlterTableDefinitionStatementsEvent $event): void
   {
-    $mergedData = $this->modelGenerator->addSchemasForAllModules($event->getSqlData());
+    $mergedData = DynamicModelUtility::addSchemasForAllModules($event->getSqlData());
     $event->setSqlData($mergedData);
   }
 }
