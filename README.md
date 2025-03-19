@@ -11,10 +11,9 @@ Extension to facilitate import from PIM to TYPO3 records.
 Requirements
 -----------------------------------------
 
-1. Typo3 version 12.4 or higher
-2. Typo3 in composer mode
+1. TYPO3 version 12.4 or higher
+2. TYPO3 in composer mode
 3. PHP version 8.1 or higher
-4. Installed typo3/cms-scheduler package: `composer require typo3/cms-scheduler`
 
 Documentation and Guides
 ------------
@@ -55,7 +54,7 @@ Versions
 | 6.x     | 12.x      | 8.1 - 8.3 | Features, Bugfixes, Security Updates |
 | 5.x     | 7.6 - 8.7 | 5.5 - 7.2 | Support dropped                      |
 
-Migration from Typo3 v8.x to v12.x
+Migration from TYPO3 v8.x to v12.x
 -----------------------------------------
 
 Please refer to the [Migration Guide](./Documentation/migration.md) document included in this

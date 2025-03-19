@@ -121,7 +121,7 @@ class ProductMapping extends AbstractMapping
     /**
      * @var string
      */
-    protected $repositoryClassName = ProductRepository::class;
+    protected string $repositoryClassName = ProductRepository::class;
     
     public function check(ApiClient $client, Module $module, array $status)
     {
@@ -240,7 +240,7 @@ class ProductTypeConverter extends AbstractUuidAwareObjectTypeConverter implemen
     /**
      * @var string
      */
-    protected $targetType = Product::class;
+    protected string $targetType = Product::class;
 }
 ```
 
@@ -496,10 +496,10 @@ Note: in order to make these classes visible to an IDE, the file system path mus
 and not excluded. The default folder in which classes get generated is:
 
 ```
-./typo3temp/var/Cache/Code/fourallportal_classes/
+./var/cache/code/fourallportal_classes/
 ```
 
-Normal practice is to exclude scanning files in `typo3temp` but in the context of fourallportal
+Normal practice is to exclude scanning files in `./var` but in the context of fourallportal
 it is very helpful to not exclude this specific folder.
 
 You can also inspect the generated classes in this folder. They use a shared-hash filename with
@@ -536,9 +536,6 @@ place in your extension to configure your entities:
 return [
     'ctrl' => [
         'title' => 'LLL:EXT:products/Resources/Private/Language/locallang_db.xlf:tx_products_domain_model_product',
-    ],
-    'interface' => [
-        'showRecordFieldList' => 'brand, dyn1, dyn2',
     ],
     'columns' => array_merge(
         \Crossmedia\Fourallportal\DynamicModel\DynamicModelGenerator::generateTableConfigurationForModuleIdentifiedByModelClassName(\Crossmedia\Products\Domain\Model\Product::class),
@@ -617,7 +614,7 @@ There are two ways to force dynamic models to be updated.
 From the command line (or as scheduler task executing the "Extbase Controller Command")
 
 ```bash
-./typo3/cli_dispatch.phpsh extbase fourallportal:updateModels
+./bin/typo3 fourallportal:updateModels
 ```
 
 This command force-updates all models by reading the remote API and then regenerating
@@ -649,7 +646,7 @@ won't be covered here.
 
 The second option, adding a scheduled task in TYPO3, requires the following steps:
 
-* Make sure a crontab task exists which calls `./typo3/cli_dispatch.phpsh scheduler` at
+* Make sure a crontab task exists which calls `./bin/typo3 scheduler:run` at
   regular intervals. The interval you set for this crontab task will be the lowest possible
   frequency at which jobs can run in TYPO3; suggested value is every 5 minutes.
 * Make sure the `scheduler` system extension is installed in TYPO3.

@@ -28,12 +28,15 @@ the input entity class name. The abstract class contains
 all the dynamically generated properties associated with
 the Module.
 
-**Usage:** `fourallportal:generateAbstractModelClass <entityClassName> [<strict>]`
+**Usage:** `fourallportal:generateAbstractModelClass [options] <entityClassName>`
 
-| Argument          | Description                                         |
-|-------------------|-----------------------------------------------------|
-| `entityClassName` | entityClassName                                     |
-| `strict`          | If TRUE, generates strict PHP code [default: false] |
+| Argument          | Description                                                         |
+|-------------------|---------------------------------------------------------------------|
+| `entityClassName` | Name of the entity class. Use two back slashes on the command line  |
+
+| Option     | Description                                |
+|------------|--------------------------------------------|
+| `--strict` | Generates strict PHP code |
 
 ## Generate TCA for model
 
@@ -51,12 +54,15 @@ Should you need to adapt individual properties such as the
 field used for label, the icon path etc. please use the
 Configuration/TCA/Overrides/$tableName.php file instead.
 
-**Usage:** `fourallportal:generateTableConfiguration <entityClassName> [<readOnly>]`
+**Usage:** `fourallportal:generateTableConfiguration [options] <entityClassName>`
 
 | Argument          | Description                                                 |
 |-------------------|-------------------------------------------------------------|
 | `entityClassName` | entityClassName                                             |
-| `readOnly`        | If TRUE, generates TCA fields as read-only [default: false] |
+
+| Option     | Description                                        |
+|------------|----------------------------------------------------|
+| `--read-only`     | Generates TCA fields as read-only |
 
 ## Generate additional SQL schema file
 
@@ -85,13 +91,16 @@ Shortcut method for calling all of the three specific
 generate commands to generate static configuration files for
 all dynamic-model-enabled modules' entities.
 
-**Usage:** `fourallportal:generate <entityClassName> [<strict> [<readOnly>]]`
+**Usage:** `fourallportal:generate [options] <entityClassName>`
 
 | Argument          | Description                                                 |
 |-------------------|-------------------------------------------------------------|
 | `entityClassName` | entityClassName                                             |
-| `strict`          | If TRUE, generates strict PHP code [default: false]         |
-| `readOnly`        | If TRUE, generates TCA fields as read-only [default: false] |
+
+| Option     | Description                                        |
+|------------|----------------------------------------------------|
+| `--strict` | Generates strict PHP code |
+| `--read-only`     | Generates TCA fields as read-only |
 
 ## Get module and connector configuration
 
@@ -140,11 +149,11 @@ mapping class the module uses, and that the server name does
 not get used - it is only there to identify the entry in your
 configuration file
 
-**Usage:** `fourallportal:initialize [<fail>]`
+**Usage:** `fourallportal:initialize [options]`
 
-| Argument | Description                                                                                         |
-|----------|-----------------------------------------------------------------------------------------------------|
-| `fail`   | If TRUE, any connectivity test failure will cause the command to exit with failure [default: false] |
+| Options  | Description                                                                               |
+|----------|-------------------------------------------------------------------------------------------|
+| `--fail` | Any connectivity test failure will cause the command to exit with failure |
 
 ## Pin PIM schema version
 
@@ -175,19 +184,23 @@ the provided README.md file for more information about this.
 
 Execute this to synchronise events from the PIM API
 
-**Usage:** `fourallportal:sync [<sync> [<fullSync> [<module> [<exclude> [<force> [<execute> [<maxEvents> [<maxTime> [<maxThreads>]]]]]]]]]`
+**Usage:** `fourallportal:sync [options] [<module> [<exclude> [<maxEvents> [<maxTime> [<maxThreads>]]]]]`
 
 | Argument     | Description                                                                                                                                                      |
 |--------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sync`       | Set to true to sync events (starting from last received event). If execute=true will happen before executing [default: false]                                    |
-| `fullSync`   | Set to true to trigger a full sync [default: false]                                                                                                              |
 | `module`     | If passed can be used to only sync one module, using the module or connector name it has in 4AP                                                                  |
 | `exclude`    | Exclude a list of modules from processing (CSV string module names)                                                                                              |
-| `force`      | If set, forces the sync to run regardless of lock and will neither lock nor unlock the task [default: false]                                                     |
-| `execute`    | If true, also executes events after receiving (syncing) events [default: false]                                                                                  |
 | `maxEvents`  | Maximum number of events to process. Default is unlimited. Affects only the number of events being executed, if sync is enabled will still sync all [default: 0] |
 | `maxTime`    | Maximum number of seconds that the sync is allowed to run, once expired, will require a new execution to continue [default: 0]                                   |
 | `maxThreads` | Maximum number of concurrent threads which are allowed to execute events. Ignored if sync=true [default: 4]                                                      |
+
+
+| Options       | Description                                                                                          |
+|---------------|------------------------------------------------------------------------------------------------------|
+| `--sync`      | Sync events (starting from last received event). If execute=true will happen before executing        |
+| `--full-sync` | Trigger a full sync                                                                                  |
+| `--force`     | Forces the sync to run regardless of lock and will neither lock nor unlock the task  |
+| `--execute`   | If true, also executes events after receiving (syncing) events                                                                                 |
 
 ## Unlock sync
 
@@ -222,9 +235,9 @@ are included in the response.
 
 Outputs streaming YAML.
 
-**Usage:** `fourallportal:test [<onlyFailed> [<withHistory>]]`
+**Usage:** `fourallportal:test [options]`
 
-| Argument      | Description                                                                                         |
-|---------------|-----------------------------------------------------------------------------------------------------|
-| `onlyFailed`  | If TRUE, only outputs failed properties [default: false]                                            |
-| `withHistory` | If TRUE, includes a tracking history of schema/response consistency for each module [default: true] |
+| Options          | Description                                                                                |
+|------------------|--------------------------------------------------------------------------------------------|
+| `--only-failed`  | Only outputs failed properties                                                             |
+| `--with-history` | Includes a tracking history of schema/response consistency for each module |
