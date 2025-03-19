@@ -273,7 +273,7 @@ TEMPLATE;
   }
 
   /**
-   * @param boolean $safeMode
+   * @param bool $safeMode
    * @return void
    * @throws ApiException
    * @throws IllegalObjectTypeException
@@ -321,8 +321,8 @@ TEMPLATE;
    * loadAbstractClass() method on this class.
    *
    * @param Module $module
-   * @param boolean $strict If TRUE, generates strict PHP code
-   * @param boolean $asFallback
+   * @param bool $strict If TRUE, generates strict PHP code
+   * @param bool $asFallback
    * @return string
    * @throws ApiException
    */
@@ -374,7 +374,7 @@ TEMPLATE;
 
   /**
    * @param string $className
-   * @param boolean $safe
+   * @param bool $safe
    * @throws RuntimeException
    */
   public static function loadAbstractClass(string $className, bool $safe = true): void
@@ -525,12 +525,18 @@ TEMPLATE;
    * @return array
    * @throws Exception
    */
-  protected function guessLocalTypesFromRemoteField(string $originalName, array $fieldConfiguration, $currentSideModuleName)
+  protected function guessLocalTypesFromRemoteField(string $originalName, array $fieldConfiguration, string $currentSideModuleName): array
   {
     $textFieldTypes = ['CEText', 'MAMString', 'XMPString'];
-    if (array_key_exists('fulltext', $fieldConfiguration) || in_array($fieldConfiguration['type'], $textFieldTypes)) {
+    if (array_key_exists('fulltext', $fieldConfiguration) && in_array($fieldConfiguration['type'], $textFieldTypes)) {
       // Shortcut: any fulltext/text typed fields will be "string" in class property and "text" in SQL
-      return ['string', 'text', ['type' => 'text']];
+      return [
+          'string',
+          'text',
+          [
+              'type' => 'text'
+          ]
+      ];
     }
 
     //$fieldName = $this->resolveFieldName($fieldConfiguration);
@@ -555,12 +561,12 @@ TEMPLATE;
         $dataType = '\\DateTime';
         $sqlType = 'int(11) default 0 NOT NULL';
         $tca = [
-          'type' => 'input'
+            'type' => 'datetime',
         ];
         break;
       case 'MAMBoolean';
       case 'CEBoolean':
-        $dataType = 'boolean';
+        $dataType = 'bool';
         $sqlType = 'int(1) default 0 NOT NULL';
         $tca = [
           'type' => 'check'
@@ -570,15 +576,15 @@ TEMPLATE;
         $dataType = 'float';
         $sqlType = 'double(10,6) default 0.0 NOT NULL';
         $tca = [
-          'type' => 'input'
+            'type' => 'number',
+            'format' => 'decimal'
         ];
         break;
       case 'CELong':
         $dataType = 'int';
         $sqlType = 'bigint(20) default 0 NOT NULL';
         $tca = [
-          'type' => 'input',
-          'eval' => 'trim,int'
+            'type' => 'number',
         ];
         break;
       case 'CETimestamp':
@@ -588,8 +594,7 @@ TEMPLATE;
         $dataType = 'int';
         $sqlType = 'int(11) default 0 NOT NULL';
         $tca = [
-          'type' => 'input',
-          'eval' => 'trim,int'
+            'type' => 'number',
         ];
         break;
       case 'MAMList':
@@ -666,6 +671,7 @@ TEMPLATE;
       $sqlType = 'int(11) default 0 NOT NULL';
       $tca = [
         'type' => 'select',
+        'renderType' => 'selectSingle',
         'foreign_table' => 'tx_fourallportal_domain_model_complextype',
         'size' => 1,
         //'foreign_field' => 'parent_uid',
@@ -789,7 +795,6 @@ TEMPLATE;
       case 'CEIdList':
       case 'MANY_TO_MANY':
         $tca['type'] = 'group';
-        $tca['internal_type'] = 'db';
         $tca['allowed'] = $tableNameChild ?? $tableNameParent;
         $tca['MM'] = 'tx_fourallportal_' . str_replace('.', '_', ($fieldName)) . '_mm';
         unset($tca['renderType']);
@@ -821,73 +826,14 @@ TEMPLATE;
         break;
     }
 
-    /*
-    if (($tca['foreign_table'] ?? null) === 'sys_file_reference' && $fieldType === 'ONE_TO_ONE') {
-        $tca['type'] = 'inline';
-        $tca = array_merge(
-            $tca,
-            [
-                'foreign_table' => 'sys_file_reference',
-                'foreign_field' => 'uid_foreign',
-                'foreign_sortby' => 'sorting_foreign',
-                'foreign_table_field' => 'tablenames',
-                'foreign_match_fields' =>
-                    [
-                        'fieldname' => 'product_images',
-                        'tablenames' => 'tx_syzygyproducts_domain_model_productdetail',
-                        'table_local' => 'sys_file',
-                    ],
-                'foreign_label' => 'uid_local',
-                'foreign_selector' => 'uid_local',
-            ]
-        );
-        unset($tca['renderType']);
-    } else
-    */
     if (($tca['foreign_table'] ?? null) === 'sys_file_reference') {
-      $tca = [
-          ### !!! Watch out for fieldName different from columnName
+      /*
+       * TODO: Support options minitems and maxitems
+       *
+       * See: https://docs.typo3.org/m/typo3/reference-tca/12.4/en-us/ColumnsConfig/Type/File/Index.html
+       */
+      return [
           'type' => 'file',
-          'appearance' => [
-            'createNewRelationLinkTitle' => 'LLL:EXT:frontend/Resources/Private/Language/locallang_ttc.xlf:media.addFileReference'
-          ],
-          'foreign_types' => [
-            '0' => [
-              'showitem' => '
-                                --palette--;LLL:EXT:lang/locallang_tca.xlf:sys_file_reference.imageoverlayPalette;imageoverlayPalette,
-                                --palette--;;filePalette'
-            ],
-            File::FILETYPE_TEXT => [
-              'showitem' => '
-                                --palette--;LLL:EXT:lang/locallang_tca.xlf:sys_file_reference.imageoverlayPalette;imageoverlayPalette,
-                                --palette--;;filePalette'
-            ],
-            File::FILETYPE_IMAGE => [
-              'showitem' => '
-                                --palette--;LLL:EXT:lang/locallang_tca.xlf:sys_file_reference.imageoverlayPalette;imageoverlayPalette,
-                                --palette--;;filePalette'
-            ],
-            File::FILETYPE_AUDIO => [
-              'showitem' => '
-                                --palette--;LLL:EXT:lang/locallang_tca.xlf:sys_file_reference.imageoverlayPalette;imageoverlayPalette,
-                                --palette--;;filePalette'
-            ],
-            File::FILETYPE_VIDEO => [
-              'showitem' => '
-                                --palette--;LLL:EXT:lang/locallang_tca.xlf:sys_file_reference.imageoverlayPalette;imageoverlayPalette,
-                                --palette--;;filePalette'
-            ],
-            File::FILETYPE_APPLICATION => [
-              'showitem' => '
-                                --palette--;LLL:EXT:lang/locallang_tca.xlf:sys_file_reference.imageoverlayPalette;imageoverlayPalette,
-                                --palette--;;filePalette'
-            ]
-          ],
-          //'maxitems' => $fieldType  === 'ONE_TO_ONE' ? 1 : 99999,
-          'foreign_match_fields' => [
-            'fieldname' => $fieldConfiguration['field'],
-            'tablenames' => $currentTableName,
-          ],
       ];
     }
 
@@ -1212,7 +1158,9 @@ TEMPLATE;
         if ($hasDefaultValue) {
             if ($value === null || $value === 'null') {
                 $value = 'null';
-            } else {
+            } elseif (is_bool($value)) {
+                $value = $value ? 'true' : 'false';
+            } elseif (!is_numeric($value)) {
                 $value = trim($value, '\'');
                 $value = '\'' . $value . '\'';
             }
@@ -1408,6 +1356,22 @@ TEMPLATE;
               $typeWithSubtypes[] = $type;
               $strictTypes[] = $type;
           }
+      }
+
+      /*
+       * Correct data type of the values
+       */
+      if (str_contains($typeString, 'bool')) {
+          $value = trim($value, '\'');
+          $value = (bool)$value;
+      } elseif ($value === null || $value === 'null') {
+          $value = null;
+      } elseif (str_contains($typeString, 'int')) {
+          $value = trim($value, '\'');
+          $value = (int)$value;
+      } elseif (str_contains($typeString, 'float')) {
+          $value = trim($value, '\'');
+          $value = (float)$value;
       }
 
       $this->properties[$name] = [
