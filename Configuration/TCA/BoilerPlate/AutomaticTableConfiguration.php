@@ -39,14 +39,6 @@ return [
                 'type' => 'passthrough',
             ],
         ],
-        't3ver_label' => [
-            'label' => 'LLL:EXT:lang/locallang_general.xlf:LGL.versionLabel',
-            'config' => [
-                'type' => 'input',
-                'size' => 30,
-                'max' => 255,
-            ],
-        ],
         'remote_id' => [
             'exclude' => true,
             'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang.xlf:universal.remote_id',

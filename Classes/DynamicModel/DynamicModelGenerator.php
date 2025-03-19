@@ -78,32 +78,10 @@ TEMPLATE;
     protected const RELATION_TYPE_MULTI = 3;
 
     protected array $automaticSchemaColumns = [
-        'uid INT(11) NOT NULL auto_increment',
-        'pid INT(11) DEFAULT \'0\' NOT NULL',
-        'tstamp INT(11) unsigned DEFAULT \'0\' NOT NULL',
-        'crdate INT(11) unsigned DEFAULT \'0\' NOT NULL',
-        'deleted TINYINT(4) unsigned DEFAULT \'0\' NOT NULL',
-        't3ver_oid INT(11) DEFAULT \'0\' NOT NULL',
-        't3ver_id INT(11) DEFAULT \'0\' NOT NULL',
-        't3ver_wsid INT(11) DEFAULT \'0\' NOT NULL',
-        't3ver_label VARCHAR(255) DEFAULT \'\' NOT NULL',
-        't3ver_state TINYINT(4) DEFAULT \'0\' NOT NULL',
-        't3ver_stage INT(11) DEFAULT \'0\' NOT NULL',
-        't3ver_count INT(11) DEFAULT \'0\' NOT NULL',
-        't3ver_tstamp INT(11) DEFAULT \'0\' NOT NULL',
-        't3ver_move_id INT(11) DEFAULT \'0\' NOT NULL',
-        'sys_language_uid INT(11) DEFAULT \'0\' NOT NULL',
-        'l10n_state TEXT DEFAULT NULL',
-        'l10n_parent INT(11) DEFAULT \'0\' NOT NULL',
-        'l10n_diffsource mediumblob',
         'remote_id varchar(64) DEFAULT \'\' NOT NULL',
     ];
     protected array $automaticSchemaKeys = [
-        'PRIMARY KEY (uid)',
-        'KEY parent (pid)',
         'KEY remote_id (remote_id)',
-        'KEY t3ver_oid (t3ver_oid,t3ver_wsid)',
-        'KEY language (l10n_parent,sys_language_uid)',
     ];
 
     /**
@@ -173,8 +151,11 @@ TEMPLATE;
       if ($isAutomatedModel) {
         $lines = array_merge($lines, $this->automaticSchemaKeys);
       }
-
-      $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');';
+      $lines = array_map(
+        fn (string $line) => "    " . $line,
+        $lines
+      );
+      $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');'. PHP_EOL;
     }
 
     // Iterate dynamic model classes which were NOT handled by a configured module.
@@ -182,26 +163,11 @@ TEMPLATE;
     foreach ($configuredDynamicModels as $entityClassName) {
       $tableName = $this->dataMapper->getDataMap($entityClassName)->getTableName();
       $lines = array_merge($this->automaticSchemaColumns, $this->automaticSchemaKeys);
-      $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');';
-    }
-
-    $manyToManyTableTemplate = <<< TEMPLATE
-
-CREATE TABLE %s (
-    uid_local int(11) DEFAULT '0' NOT NULL,
-    uid_foreign int(11) DEFAULT '0' NOT NULL,
-    sorting int(11) DEFAULT '0' NOT NULL,
-    sorting_foreign int(11) DEFAULT '0' NOT NULL,
-
-    KEY uid_local_foreign (uid_local,uid_foreign)
-);
-
-TEMPLATE;
-
-
-    // Process all queued MM table creations
-    foreach ($manyToManyRelations as $manyToManyTableName) {
-      $sqlString[] = sprintf($manyToManyTableTemplate, $manyToManyTableName);
+      $lines = array_map(
+        fn (string $line) => "    " . $line,
+        $lines
+      );
+      $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');'. PHP_EOL;
     }
 
     return $sqlString;
@@ -245,7 +211,7 @@ TEMPLATE;
     $tableName = GeneralUtility::makeInstance(DataMapper::class)->getDataMap($modelClassName)->getTableName();
 
     $tca = include ExtensionManagementUtility::extPath('fourallportal', 'Configuration/TCA/BoilerPlate/AutomaticTableConfiguration.php');
-    $additionalColumns = DynamicModelGenerator::generateTableConfigurationForModuleIdentifiedByModelClassName($modelClassName, $readOnly);
+    $additionalColumns = $this->generateTableConfigurationForModuleIdentifiedByModelClassName($modelClassName, $readOnly);
     $additionalColumnNames = implode(',', array_keys($additionalColumns));
     $detectedIconFile = $this->findIconFile($extensionKey, $tableName);
     $tca['columns'] = array_replace($additionalColumns, $tca['columns']);
@@ -270,15 +236,16 @@ TEMPLATE;
    * @throws IllegalObjectTypeException
    * @throws UnknownObjectException
    */
-  public static function generateTableConfigurationForModuleIdentifiedByModelClassName(string $modelClassName, bool $readOnly = false): array
+  public function generateTableConfigurationForModuleIdentifiedByModelClassName(string $modelClassName, bool $readOnly = false): array
   {
-    $cacheManager = GeneralUtility::makeInstance(CacheManager::class);
-    $cacheManager->setCacheConfigurations($GLOBALS['TYPO3_CONF_VARS']['SYS']['caching']['cacheConfigurations']);
+    $cacheManager = $this->getGeneratedClassCache();
+    $modelClassName = ltrim($modelClassName, '\\');
 
     $columns = [];
-    foreach (GeneralUtility::makeInstance(static::class)->getAllConfiguredModules() as $module) {
-      if ($module->getMapper()->getEntityClassName() === $modelClassName) {
-        $propertyConfigurations = (new static())->getPropertyConfigurationFromConnector($module);
+    foreach ($this->getAllConfiguredModules() as $module) {
+      $entityClassName = ltrim($module->getMapper()->getEntityClassName(), '\\');
+      if ($entityClassName === $modelClassName) {
+        $propertyConfigurations = $this->getPropertyConfigurationFromConnector($module);
         foreach ($propertyConfigurations as $propertyConfiguration) {
           if ($readOnly) {
             $propertyConfiguration['config']['readOnly'] = true;
