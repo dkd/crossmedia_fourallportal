@@ -22,8 +22,8 @@ use TYPO3\CMS\Extbase\Utility\ExtensionUtility;
 //  \TYPO3\CMS\Core\Configuration\ExtensionConfiguration::class
 //)->get('fourallportal');
 
-if (!isset($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['fourallportal'])) {
-  $GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['fourallportal'] = [
+if (!isset($GLOBALS['TYPO3_CONF_VARS']['EXTENSIONS']['fourallportal'])) {
+  $GLOBALS['TYPO3_CONF_VARS']['EXTENSIONS']['fourallportal'] = [
     'clientConnectTimeout' => 20,
     'clientTransferTimeout' => 60,
     'eventDeferralTTL' => 86400,

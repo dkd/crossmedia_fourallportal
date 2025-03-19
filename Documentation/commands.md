@@ -110,7 +110,7 @@ as JSON.
 Creates Server and Module configuration if configured in
 extension configuration. The array in:
 
-`$GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['fourallportal']`
+`$GLOBALS['TYPO3_CONF_VARS']['EXTENSIONS']['fourallportal']`
 
 can contain an array of servers and modules, e.g.:
 
