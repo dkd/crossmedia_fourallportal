@@ -212,7 +212,7 @@ TEMPLATE;
    * @param string $tableName
    * @return string
    */
-  protected static function findIconFile(string $extensionKey, string $tableName): string
+  protected function findIconFile(string $extensionKey, string $tableName): string
   {
     $extensions = ['svg', 'png', 'jpg', 'jpeg', 'gif'];
     $detectedFiles = GeneralUtility::getFilesInDir(
@@ -237,7 +237,7 @@ TEMPLATE;
    * @throws IllegalObjectTypeException
    * @throws UnknownObjectException
    */
-  public static function generateAutomaticTableConfigurationForModelClassName(string $modelClassName, bool $readOnly = false): array
+  public function generateAutomaticTableConfigurationForModelClassName(string $modelClassName, bool $readOnly = false): array
   {
     $modelClassNameParts = explode('\\', substr($modelClassName, 0, strpos($modelClassName, '\\Domain\\Model\\')));
     $extensionName = array_pop($modelClassNameParts);
@@ -247,7 +247,7 @@ TEMPLATE;
     $tca = include ExtensionManagementUtility::extPath('fourallportal', 'Configuration/TCA/BoilerPlate/AutomaticTableConfiguration.php');
     $additionalColumns = DynamicModelGenerator::generateTableConfigurationForModuleIdentifiedByModelClassName($modelClassName, $readOnly);
     $additionalColumnNames = implode(',', array_keys($additionalColumns));
-    $detectedIconFile = static::findIconFile($extensionKey, $tableName);
+    $detectedIconFile = $this->findIconFile($extensionKey, $tableName);
     $tca['columns'] = array_replace($additionalColumns, $tca['columns']);
     $tca['types']['1']['showitem'] .= ',' . $additionalColumnNames;
     $tca['columns']['l10n_parent']['config']['foreign_table'] = $tableName;
