@@ -61,9 +61,10 @@ DESCRIPTION)
         $io->title($this->getDescription());
 
         $entityClassName = (string)$input->getArgument('entityClassName');
-        $readOnly = (bool)($input->hasOption('read-only') && $input->getOption('read-only'));
-
-        $this->configGeneratorService->generateTableConfiguration($entityClassName, $readOnly);
+        if ((bool)($input->hasOption('read-only') && $input->getOption('read-only'))) {
+            $this->configGeneratorService->enableReadOnly();
+        }
+        $this->configGeneratorService->generateTableConfiguration($entityClassName);
         return Command::SUCCESS;
     }
 }

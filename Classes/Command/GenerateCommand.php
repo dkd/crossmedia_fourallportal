@@ -65,14 +65,18 @@ DESCRIPTION)
         $io->title($this->getDescription());
 
         $entityClassName = (string)$input->getArgument('entityClassName');
-        $strict = (bool)($input->hasOption('strict') && $input->getOption('strict'));
-        $readOnly = (bool)($input->hasOption('read-only') && $input->getOption('read-only'));
+        if ((bool)($input->hasOption('strict') && $input->getOption('strict'))) {
+            $this->configGeneratorService->enableStrictTypes();
+        }
+        if ((bool)($input->hasOption('read-only') && $input->getOption('read-only'))) {
+            $this->configGeneratorService->enableReadOnly();
+        }
 
         $this->configGeneratorService->setOutputInterface($output);
         try {
             $this->configGeneratorService->generateSqlSchemaCommand();
-            $this->configGeneratorService->generateTableConfiguration($entityClassName, $readOnly);
-            $this->configGeneratorService->generateAbstractModelClassCommand($io, $entityClassName, $strict);
+            $this->configGeneratorService->generateTableConfiguration($entityClassName);
+            $this->configGeneratorService->generateAbstractModelClassCommand($io, $entityClassName);
         } catch (\Throwable $exception) {
             $io->error($exception->getMessage());
             return Command::FAILURE;

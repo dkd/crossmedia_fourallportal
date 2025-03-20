@@ -68,9 +68,11 @@ DESCRIPTION)
         $io->title($this->getDescription());
 
         $entityClassName = (string)$input->getArgument('entityClassName');
-        $strict = (bool)($input->hasOption('strict') && $input->getOption('strict'));
 
-        $this->configGeneratorService->generateAbstractModelClassCommand($io, $entityClassName, $strict);
+        if ((bool)($input->hasOption('strict') && $input->getOption('strict'))) {
+            $this->configGeneratorService->enableStrictTypes();
+        }
+        $this->configGeneratorService->generateAbstractModelClassCommand($io, $entityClassName);
         return Command::SUCCESS;
     }
 }

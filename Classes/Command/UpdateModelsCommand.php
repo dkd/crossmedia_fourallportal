@@ -6,6 +6,7 @@ use Crossmedia\Fourallportal\DynamicModel\DynamicModelGenerator;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 #[AsCommand(
@@ -38,7 +39,14 @@ an abstract model class to use with each specific model.
 A special class loading function must be used in the model
 before it can use the dynamically generated base class. See
 the provided README.md file for more information about this.
-DESCRIPTION);
+DESCRIPTION)
+            ->addOption(
+                'strict',
+                null,
+                InputOption::VALUE_NONE,
+                'Generates strict PHP code'
+            )
+        ;
     }
 
     /**
@@ -46,6 +54,9 @@ DESCRIPTION);
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        if ((bool)($input->hasOption('strict') && $input->getOption('strict'))) {
+            $this->dynamicModelGenerator->enableStrictTypes();
+        }
         $this->dynamicModelGenerator->generateAbstractModelsForAllModules();
         return Command::SUCCESS;
     }
