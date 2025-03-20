@@ -580,9 +580,9 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
      * @throws NoSuchPropertyException
      * @throws UnknownClassException
      */
-    protected function determineDataTypeForProperty(string $propertyName, object $object): bool|string
+    protected function determineDataTypeForProperty(string $propertyName, object $object): string
     {
-        if (property_exists(get_class($object), $propertyName)) {
+        if (property_exists($object, $propertyName)) {
             $reflectionService = GeneralUtility::makeInstance(ReflectionService::class);
             $classSchema = $reflectionService->getClassSchema($object);
             $property = $classSchema->getProperty($propertyName);
