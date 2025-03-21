@@ -69,12 +69,13 @@ namespace %s;%s
 class %s extends %s
 {
 %s
-%s    public function __construct()
+%s
+    public function __construct()
     {
         \$this->initializeStorageObjects();
     }
 
-    public function initializeStorageObjects()
+    public function initializeStorageObjects()%s
     {
 %s
     }
@@ -886,6 +887,7 @@ TEMPLATE;
                 'mm'
             ]
         );
+        unset($tca['renderType']);
 
         /*
          * Table names are not allowed to exceed 64 characters
@@ -1070,6 +1072,7 @@ TEMPLATE;
       'ParentClass',
       $this->getPropertiesString(),
       $functionsAndProperties,
+      '', // initialize objects: return type
       $this->getInitializeStorageString()
     );
 
@@ -1167,6 +1170,7 @@ TEMPLATE;
       'ParentClass',
       $this->getPropertiesString(true),
       $functionsAndProperties,
+      ': void', // initialize objects: return type
       $this->getInitializeStorageString()
     );
 
@@ -1264,7 +1268,9 @@ TEMPLATE;
   {
       $initializedStorages = [];
       sort($this->objectStorageProperties);
-      foreach ($this->objectStorageProperties as $propertyName) {
+      $properties = array_unique($this->objectStorageProperties);
+
+      foreach ($properties as $propertyName) {
           $initializedStorages[] = '        $this->' . $propertyName . ' = new ObjectStorage();';
       }
       return implode(PHP_EOL, $initializedStorages);
@@ -1413,6 +1419,9 @@ TEMPLATE;
                   $aliases = [];
                   foreach ($subtypes as $typeName) {
                       if (class_exists($typeName)) {
+                          if (ltrim($typeName, '\\') === ObjectStorage::class) {
+                              $this->registerStorageInitialization($name);
+                          }
                           $aliases[] = $this->registerUseStatement($typeName);
                       } else {
                           $aliases[] = $typeName;
@@ -1422,10 +1431,16 @@ TEMPLATE;
               } elseif (class_exists($subtype)) {
                   $subtype = $this->registerUseStatement($subtype);
               }
+              if (ltrim($mainType, '\\') === ObjectStorage::class) {
+                  $this->registerStorageInitialization($name);
+              }
               $alias = $this->registerUseStatement($mainType);
               $typeWithSubtypes[] = $alias . '<' . $subtype . '>';
               $strictTypes[] = $alias;
           } elseif (class_exists($type)) {
+              if (ltrim($type, '\\') === ObjectStorage::class) {
+                  $this->registerStorageInitialization($name);
+              }
               $alias = $this->registerUseStatement($type);
               $typeWithSubtypes[] = $alias;
               $strictTypes[] = $alias;
