@@ -1139,18 +1139,28 @@ TEMPLATE;
           allowNull: str_starts_with($returnType, '?')
       );
 
+      $returnTypesGetter = $this->properties[$propertyName]['strictTypes'];
+      if ($isLazySingleObjectRelation && str_contains($returnTypesGetter, 'LazyLoadingProxy')) {
+          $typeNamesGetter = explode('|', $returnTypesGetter);
+          $typeNamesGetter = array_filter(
+              $typeNamesGetter,
+              fn (string $name) => $name !== 'LazyLoadingProxy'
+          );
+          $returnTypesGetter = implode('|', $typeNamesGetter);
+      }
+
       $upperCasePropertyName = ucfirst($propertyName);
       $functionsAndProperties .= PHP_EOL . sprintf(
         self::PROPERTY_TEMPLATE,
-        $upperCasePropertyName,
-        $returnType ? ': ' . $this->properties[$propertyName]['strictTypes'] : '',
+        $upperCasePropertyName, // getter: Name
+        $returnType ? ': ' . $returnTypesGetter : '', // getter: return type
         $propertyName . ($isLazySingleObjectRelation ? ' instanceof LazyLoadingProxy ? $this->' . $propertyName . '->_loadRealInstance() : $this->' . $propertyName : ''),
-        $upperCasePropertyName,
-        $returnType ? $this->properties[$propertyName]['strictTypes'] . ' ' : '',
+        $upperCasePropertyName, // setter: name
+        $returnType ? $this->properties[$propertyName]['strictTypes'] . ' ' : '', // setter: Argument type
         '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
-        ': void',
-        $propertyName,
-        '$' . $propertyName,
+        ': void', // setter: return type
+        $propertyName, // setter: property name
+        '$' . $propertyName, // setter: argument
         $virtualArrayGetter
       );
       $functionsAndProperties = trim($functionsAndProperties);
