@@ -1153,10 +1153,10 @@ TEMPLATE;
       $functionsAndProperties .= PHP_EOL . sprintf(
         self::PROPERTY_TEMPLATE,
         $upperCasePropertyName, // getter: Name
-        $returnType ? ': ' . $returnTypesGetter : '', // getter: return type
+        $returnType ? ': ' . $this->standadizeUnionTypes($returnTypesGetter) : '', // getter: return type
         $propertyName . ($isLazySingleObjectRelation ? ' instanceof LazyLoadingProxy ? $this->' . $propertyName . '->_loadRealInstance() : $this->' . $propertyName : ''),
         $upperCasePropertyName, // setter: name
-        $returnType ? $this->properties[$propertyName]['strictTypes'] . ' ' : '', // setter: Argument type
+        $returnType ? $this->standadizeUnionTypes($this->properties[$propertyName]['strictTypes']) . ' ' : '', // setter: Argument type
         '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
         ': void', // setter: return type
         $propertyName, // setter: property name
@@ -1178,7 +1178,7 @@ TEMPLATE;
       $this->getUseStatements(),
       $classShortName,
       'ParentClass',
-      $this->getPropertiesString(true),
+      $this->getPropertiesString(),
       $functionsAndProperties,
       ': void', // initialize objects: return type
       $this->getInitializeStorageString()
@@ -1188,6 +1188,34 @@ TEMPLATE;
     static::getGeneratedClassCache()->set($identifier, $classSourceCode);
     return $classSourceCode;
   }
+
+    /**
+     * Standadize union types
+     *
+     * @param string $typeNamesString
+     * @return string
+     */
+    protected function standadizeUnionTypes(string $typeNamesString): string
+    {
+        if (!str_contains($typeNamesString, '|')) {
+            return $typeNamesString;
+        }
+
+        $typeNames = explode('|', $typeNamesString);
+        if (count($typeNames) > 2) {
+            return $typeNamesString;
+        }
+        $typeNamesWithoutNull = array_filter(
+            $typeNames,
+            fn(string $typeName) => $typeName !== 'null'
+        );
+
+        if (count($typeNamesWithoutNull) === count($typeNames)) {
+            return $typeNamesString;
+        }
+
+        return '?' . implode('|', $typeNamesWithoutNull);
+    }
 
     /**
      * Create the list of use statements and sort them alphabetically
@@ -1227,6 +1255,7 @@ TEMPLATE;
       foreach ($propertyNames as $propertyName) {
         $type = ($this->properties[$propertyName]['type'] ?? 'string');
         $strictTypes = ($this->properties[$propertyName]['strictTypes'] ?? 'string');
+        $strictTypes = $this->standadizeUnionTypes($strictTypes);
         $typedProperty = $this->strictTypes ? $strictTypes . ' ' : '';
         $propertyDefinition = [
             '    /**'
