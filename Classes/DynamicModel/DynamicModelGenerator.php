@@ -37,6 +37,7 @@ use TYPO3\CMS\Extbase\Persistence\ObjectStorage;
  */
 class DynamicModelGenerator
 {
+    protected const RELATION_TABLE_MAX_LENGTH = 52;
     protected const CLASS_TEMPLATE = <<< TEMPLATE
 %s
 /*
@@ -856,7 +857,6 @@ TEMPLATE;
     $fieldType = $overriddenType ?? $fieldConfiguration['type'];
 
     switch ($fieldType) {
-
       // M:N is expressed to TYPO3 as any other relation, but having an "MM" entry in the TCA containing a table name.
       // This table can then be generated on-the-fly since all MM tables have the same default structure when written
       // by this model generator class.
@@ -864,30 +864,47 @@ TEMPLATE;
       case 'FIELD_LINK':
       case 'CEIdList':
       case 'MANY_TO_MANY':
+        unset($tca['renderType']);
         $tca['type'] = 'group';
         $tca['allowed'] = $foreignTableName;
-        $isParentTable = $currentSideModuleName === $fieldConfiguration['parent'];
+        $isLocalColumn = $currentSideModuleName === $fieldConfiguration['parent'];
 
-        $prefix = 'tx_fourallportal';
-        if ($isParentTable) {
-            //[$prefix, ] = explode('_domain_model_', $currentTableName, 2);
-            // Set "MM_opposite_field" to indicate this M:N is mirrored by other TCA. To do so, we must determine if
-            // we are currently on the child side of the relation, in which case our field name comes from the child
-            // entity name, and comes from parent if the opposite is true.
-            $tca['MM_opposite_field'] = $fieldConfiguration['name'] ?? GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+        if ($isLocalColumn) {
+            [$prefix, ] = explode('_domain_model_', $currentTableName, 2);
+            $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+            /*
+             * The value of name contains the field name of the foreign column
+             * which is a combination of the value of 'child' and the prefix 'parent'
+             */
+            $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['name']);
+
+            /*
+             * Self referencing table required MM_opposite_field
+             */
+            if (GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName) !== GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field'])) {
+                $tca['MM_opposite_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
+            }
         } else {
-            //[$prefix, ] = explode('_domain_model_', $foreignTableName, 2);
+            [$prefix, ] = explode('_domain_model_', $foreignTableName, 2);
+            /*
+             * Set "MM_opposite_field" to indicate this M:N is mirrored by other TCA. To do so, we must determine if
+             * we are currently on the child side of the relation, in which case our field name comes from the child
+             * entity name, and comes from parent if the opposite is true.
+             *
+             * Important:
+             * The option 'MM_opposite_field' will prevent the generation of the relation table by TYPO3.
+             * Therefor the relation configuration must be done within the main record (parent) and the child record
+             */
+            $tca['MM_opposite_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
+            $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
+            $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
         }
 
-        $tca['MM']  = implode(
-            '_',
-            [
-                $prefix,
-                GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName),
-                'mm'
-            ]
+        $tca['MM'] = $this->buildRelationTableName(
+            $prefix,
+            $columnNameLocal,
+            $columnNameForeign
         );
-        unset($tca['renderType']);
 
         /*
          * Table names are not allowed to exceed 64 characters
@@ -896,8 +913,8 @@ TEMPLATE;
          *
          * See: https://dev.mysql.com/doc/refman/8.4/en/identifier-length.html
          */
-        if (strlen($tca['MM']) >= 52) {
-            throw new \Exception('Table name "' . $tca['MM'] . '" exceeded allowed 52 characters');
+        if (strlen($tca['MM']) > static::RELATION_TABLE_MAX_LENGTH) {
+            throw new \Exception('Table name "' . $tca['MM'] . '" exceeded allowed ' . static::RELATION_TABLE_MAX_LENGTH . ' characters');
         }
         break;
 
@@ -932,6 +949,139 @@ TEMPLATE;
     }
 
     return $tca;
+  }
+
+    /**
+     * Calculate the name of the relation table.
+     *
+     * TYPO3 uses two different formats for table names:
+     *
+     * 1. tx_<extension name>_<column local>_mm
+     * 2. tx_<extension name>_<column local>_<column foreign>_mm
+     *
+     * With the first format table names may not be unique threw out the extension
+     * The second format is more unique but leads to longer table names which can break the 52 character constraint
+     *
+     * This method uses the second format for table names.
+     *
+     * In case the calculated table name has less or exactly 52 characters, the table name is returned as is:
+     *   tx_<extension name>_<column local>_<column foreign>_mm
+     *
+     * If the table name is longer than 52 characters, a 8 character crc32 hash is calculated based on the relation table name.
+     *
+     * The relation name will be modifies as following:
+     * 1. Remove the suffix '_mm'
+     * 2. Reduce the amount of letters to 41
+     * 3. Append the calculated hash and the suffix '_mm'
+     *
+     * This should lead to a table name that is exactly 52 characters long.
+     *
+     * However, in case the name even than exceeds the 52 character length, as the last fallback the only the hash
+     * with a leading 'tx_' and a tailing '_mm' is returned.
+     *
+     * @param string $extension
+     * @param string $localFieldName
+     * @param string $foreignFieldName
+     * @return string
+     */
+  protected function buildRelationTableName(
+      string $extension,
+      string $localFieldName,
+      string $foreignFieldName
+  ): string {
+      $extension = ltrim($extension, 'tx_');
+      $extension = strtolower($extension);
+      $relationTableName = implode(
+          '_',
+          [
+              'tx',
+              $extension,
+              $localFieldName,
+              $foreignFieldName,
+              'mm'
+          ]
+      );
+
+      /*
+       * Keep the relation name as is
+       */
+      if (strlen($relationTableName) <= static::RELATION_TABLE_MAX_LENGTH) {
+          return $relationTableName;
+      }
+
+      /*
+       * Create a hash with maximum of 8 characters
+       */
+      $relationTableNameHash = hash('crc32', $relationTableName);
+      $relationTableNameWithHash = implode(
+          '_',
+          [
+              'tx',
+              $extension,
+              $localFieldName,
+              $foreignFieldName
+          ]
+      );
+      /*
+       * Shrink name to the maximum allowed size
+       * Remove enough characters from the end and add the calculated hash
+       * This should keep the table name some how readable
+       */
+      $relationTableNameWithHash = substr(
+          $relationTableNameWithHash,
+          0,
+          static::RELATION_TABLE_MAX_LENGTH - 3 // Remove '_mm' from the table name
+      );
+      $relationTableNameWithHash = substr(
+          $relationTableNameWithHash,
+          0,
+          strlen($relationTableNameWithHash) - strlen($relationTableNameHash)
+      );
+      $relationTableNameWithHash .= $relationTableNameHash . '_mm';
+      /*
+       * Return the name in following format
+       * tx_<extension name>_<local and child column name truncated>_<hash>_mm
+       */
+      if (strlen($relationTableNameWithHash) <= static::RELATION_TABLE_MAX_LENGTH) {
+          return $relationTableNameWithHash;
+      }
+
+      /*
+       * Calculated name is to long
+       * Only use the prefix and the hash value
+       */
+      $relationTableNameWithHash = implode(
+          '_',
+          [
+              'tx',
+              $extension,
+              $relationTableNameHash,
+              'mm'
+          ]
+      );
+
+      /*
+       * Return the name in following format
+       * tx_<extension name>_<hash>_mm
+       */
+      if (strlen($relationTableNameWithHash) <= static::RELATION_TABLE_MAX_LENGTH) {
+          return $relationTableNameWithHash;
+      }
+
+      /*
+       * Fallback in case the extension key (prefix) is to long
+       *
+       * Return the name in following format
+       * tx_<hash>_mm
+       */
+      return implode(
+          '_',
+          [
+              'tx',
+              $relationTableNameHash,
+              'mm'
+          ]
+      );
   }
 
     /**
