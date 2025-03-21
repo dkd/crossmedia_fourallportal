@@ -934,16 +934,16 @@ TEMPLATE;
     return $tca;
   }
 
-  /**
-   * @param string $moduleName
-   * @throws UndefinedModuleException
-   */
-  protected function validatePresenceOfConfiguredConnectorForModule($moduleName)
-  {
-    if (empty($this->getAllConfiguredModules()[$moduleName])) {
-      throw new UndefinedModuleException(sprintf('Module "%s" is unknown to TYPO3, make sure it is configured!', $moduleName), 8654469181);
+    /**
+     * @param string $moduleName
+     * @throws UndefinedModuleException
+     */
+    protected function validatePresenceOfConfiguredConnectorForModule($moduleName)
+    {
+        if (empty($this->getAllConfiguredModules()[$moduleName])) {
+            throw new UndefinedModuleException(sprintf('Module "%s" is unknown to TYPO3, make sure it is configured!', $moduleName), 8654469181);
+        }
     }
-  }
 
   /**
    * Generates the actual class file using templates.
@@ -968,21 +968,19 @@ TEMPLATE;
    * @param string|null $identifier
    * @return string
    */
-  protected function generateCachedClassFile(
-      string $className,
-      string $parentClass,
-      array $propertyConfiguration,
-      string|null $identifier = null
-  ): string {
-      $this->resetClassDefinition();
-    return $this->strictTypes
-      ? $this->generateStrictCachedClassFile($className, $parentClass, $propertyConfiguration, $identifier)
-      : $this->generateRelaxedCachedClassFile($className, $parentClass, $propertyConfiguration, $identifier);
-  }
+    protected function generateCachedClassFile(
+        string $className,
+        string $parentClass,
+        array $propertyConfiguration,
+        string|null $identifier = null
+    ): string {
+        $this->resetClassDefinition();
+        return $this->generateStrictCachedClassFile($className, $parentClass, $propertyConfiguration, $identifier);
+    }
 
-  protected function generateVirtualArrayGetter(string $propertyName): string
-  {
-    $getterTemplate = <<< TEMPLATE
+    protected function generateVirtualArrayGetter(string $propertyName): string
+    {
+        $getterTemplate = <<< TEMPLATE
     /**
      * @return array
      */
@@ -992,202 +990,135 @@ TEMPLATE;
     }
 TEMPLATE;
 
-    $strictReturn = '';
-    if ($this->strictTypes) {
-      $strictReturn = ': array';
-    }
-    return sprintf(
-      $getterTemplate,
-      ucfirst($propertyName),
-      $strictReturn,
-      $propertyName
-    );
-  }
-
-  protected function generateRelaxedCachedClassFile(
-      string $className,
-      string $parentClass,
-      array $propertyConfiguration,
-      string|null$identifier = null
-  ): string {
-    $functionsAndProperties = '';
-    foreach ($propertyConfiguration as $propertyName => $property) {
-      $returnType = $property['type'];
-      $relationType = self::RELATION_TYPE_NONE;
-      $virtualArrayGetter = '';
-      if ($property['type'] === 'array') {
-        // Arrays will be stored as strings and are, technically, strings in the model property,
-        // but will have a virtual getter method that returns a json_decode()'d value.
-        $virtualArrayGetter = $this->generateVirtualArrayGetter($propertyName);
-        $returnType = 'string';
-      }
-
-      $propertyType = $returnType;
-      $lazy = false;
-      if (str_contains($returnType, 'ObjectStorage')) {
-          $relationType = self::RELATION_TYPE_MULTI;
-      }
-      if (class_exists($returnType) || str_contains($returnType, 'ObjectStorage')) {
-        $lazy = DynamicModelRegister::isLazyProperty($className, $propertyName);
-      }
-      $isSingleObjectRelation = is_a(trim($property['type'], '?'), AbstractDomainObject::class, true);
-      $isLazySingleObjectRelation = $lazy && $isSingleObjectRelation;
-      if ($isSingleObjectRelation) {
-          $relationType = self::RELATION_TYPE_SINGLE;
-      }
-      $this->registerProperty(
-        $propertyName,
-        $propertyType,
-        ($property['default'] ?? null) === null ? null : var_export($property['default'], true),
-        lazy: $lazy,
-        relationType: $relationType
-      );
-      $upperCasePropertyName = ucfirst($propertyName);
-      $functionsAndProperties .= PHP_EOL . sprintf(
-        self::PROPERTY_TEMPLATE,
-        $upperCasePropertyName,
-        '',
-        $propertyName . ($isLazySingleObjectRelation ? ' instanceof LazyLoadingProxy ? $this->' . $propertyName . '->_loadRealInstance() : $this->' . $propertyName : ''),
-        $upperCasePropertyName,
-        '',
-        '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
-        '',
-        $propertyName,
-        '$' . $propertyName,
-        $virtualArrayGetter
-      );
-      $functionsAndProperties = trim($functionsAndProperties);
+        $strictReturn = '';
+        if ($this->strictTypes) {
+            $strictReturn = ': array';
+        }
+        return sprintf(
+            $getterTemplate,
+            ucfirst($propertyName),
+            $strictReturn,
+            $propertyName
+        );
     }
 
-    $classNameParts = explode('\\', $className);
-    $classShortName = array_pop($classNameParts);
-    $namespace = implode('\\', $classNameParts);
-    $this->registerUseStatement($parentClass, 'ParentClass');
-    $classSourceCode = sprintf(
-      self::CLASS_TEMPLATE,
-      '',
-      $namespace,
-      $this->getUseStatements(),
-      $classShortName,
-      'ParentClass',
-      $this->getPropertiesString(),
-      $functionsAndProperties,
-      '', // initialize objects: return type
-      $this->getInitializeStorageString()
-    );
+    /**
+     * Generate the model class and return the content
+     *
+     * @param string $className
+     * @param string $parentClass
+     * @param array $propertyConfiguration
+     * @param string|null $identifier
+     * @return string
+     * @throws NoSuchCacheException
+     * @throws \TYPO3\CMS\Core\Cache\Exception\InvalidDataException
+     */
+    protected function generateStrictCachedClassFile(
+        string $className,
+        string $parentClass,
+        array $propertyConfiguration,
+        string|null $identifier = null
+    ): string {
+        $functionsAndProperties = '';
 
-    $identifier = $identifier ?: sha1($className);
-    static::getGeneratedClassCache()->set($identifier, $classSourceCode);
-    return $classSourceCode;
-  }
+        foreach ($propertyConfiguration as $propertyName => $property) {
+            $variableType = $property['type'];
+            $relationType = self::RELATION_TYPE_NONE;
+            if (str_contains($property['type'], '\\Persistence\\ObjectStorage<')) {
+                $relationType = self::RELATION_TYPE_MULTI;
+                $returnType = '\\' . ObjectStorage::class;
+            } elseif (class_exists($property['type'])) {
+                $returnType = '?' . $property['type'];
+            } else {
+                $returnType = '';
+            }
+            if (in_array($property['type'], ['int', 'float', 'double', 'string', 'bool'])) {
+                settype($property['default'], $property['type']);
+                $returnType = $property['type'];
+            }
 
-  protected function generateStrictCachedClassFile(
-      string $className,
-      string $parentClass,
-      array $propertyConfiguration,
-      string|null $identifier = null
-  ): string {
-    $functionsAndProperties = '';
+            $virtualArrayGetter = '';
+            if ($variableType === 'array') {
+                // Arrays will be stored as strings and are, technically, strings in the model property,
+                // but will have a virtual getter method that returns a json_decode()'d value.
+                $virtualArrayGetter = $this->generateVirtualArrayGetter($propertyName);
+                $returnType = '?string';
+                $variableType = 'string';
+            } elseif ($variableType === 'string') {
+                $returnType = '?string';
+            }
 
-    foreach ($propertyConfiguration as $propertyName => $property) {
-      $variableType = $property['type'];
-      $relationType = self::RELATION_TYPE_NONE;
-      if (str_contains($property['type'], '\\Persistence\\ObjectStorage<')) {
-        $relationType = self::RELATION_TYPE_MULTI;
-        $returnType = '\\' . ObjectStorage::class;
-      } elseif (class_exists($property['type'])) {
-          //$this->registerUseStatement($property['type']);
-        $returnType = '?' . $property['type'];
-      } else {
-        $returnType = '';
-      }
-      if (in_array($property['type'], ['int', 'float', 'double', 'string', 'bool'])) {
-        settype($property['default'], $property['type']);
-        $returnType = $property['type'];
-      }
+            $defaultValueExpression = ($property['default'] ?? null) === null ? 'null' : var_export($property['default'], true);
 
-      $virtualArrayGetter = '';
-      if ($variableType === 'array') {
-        // Arrays will be stored as strings and are, technically, strings in the model property,
-        // but will have a virtual getter method that returns a json_decode()'d value.
-        $virtualArrayGetter = $this->generateVirtualArrayGetter($propertyName, true);
-        $returnType = '?string';
-        $variableType = 'string';
-      } elseif ($variableType === 'string') {
-        $returnType = '?string';
-      }
+            $isLazyProperty = false;
+            if (class_exists(trim($returnType, '?\\'))) {
+                $isLazyProperty = DynamicModelRegister::isLazyProperty($className, $propertyName);
+            }
+            $isSingleObjectRelation = is_a(trim($property['type'], '?'), AbstractDomainObject::class, true);
+            $isLazySingleObjectRelation = $isLazyProperty && $isSingleObjectRelation;
 
-      $defaultValueExpression = ($property['default'] ?? null) === null ? 'null' : var_export($property['default'], true);
+            if ($isSingleObjectRelation) {
+                $relationType = self::RELATION_TYPE_SINGLE;
+            }
 
-      $isLazyProperty = false;
-      if (class_exists(trim($returnType, '?\\'))) {
-        $isLazyProperty = DynamicModelRegister::isLazyProperty($className, $propertyName);
-      }
-      $isSingleObjectRelation = is_a(trim($property['type'], '?'), AbstractDomainObject::class, true);
+            $this->registerProperty(
+                $propertyName,
+                $variableType,
+                $defaultValueExpression,
+                lazy: $isLazyProperty,
+                relationType: $relationType,
+                allowNull: str_starts_with($returnType, '?')
+            );
 
-      if ($isSingleObjectRelation) {
-          $relationType = self::RELATION_TYPE_SINGLE;
-      }
-      $isLazySingleObjectRelation = $isLazyProperty && $isSingleObjectRelation;
+            $returnTypesGetter = $this->properties[$propertyName]['strictTypes'];
+            if ($isLazySingleObjectRelation && str_contains($returnTypesGetter, 'LazyLoadingProxy')) {
+                $typeNamesGetter = explode('|', $returnTypesGetter);
+                $typeNamesGetter = array_filter(
+                    $typeNamesGetter,
+                    fn(string $name) => $name !== 'LazyLoadingProxy'
+                );
+                $returnTypesGetter = implode('|', $typeNamesGetter);
+            }
 
-      $this->registerProperty(
-          $propertyName,
-          $variableType,
-          $defaultValueExpression,
-          lazy: $isLazyProperty,
-          relationType: $relationType,
-          allowNull: str_starts_with($returnType, '?')
-      );
+            $upperCasePropertyName = ucfirst($propertyName);
+            $functionsAndProperties .= PHP_EOL . sprintf(
+                    self::PROPERTY_TEMPLATE,
+                    $upperCasePropertyName, // getter: Name
+                    $this->strictTypes && $returnType ? ': ' . $this->standadizeUnionTypes($returnTypesGetter) : '', // getter: return type
+                    $propertyName . ($isLazySingleObjectRelation ? ' instanceof LazyLoadingProxy ? $this->' . $propertyName . '->_loadRealInstance() : $this->' . $propertyName : ''),
+                    $upperCasePropertyName, // setter: name
+                    $this->strictTypes && $returnType ? $this->standadizeUnionTypes($this->properties[$propertyName]['strictTypes']) . ' ' : '', // setter: Argument type
+                    '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
+                    $this->strictTypes ? ': void' : '', // setter: return type
+                    $propertyName, // setter: property name
+                    '$' . $propertyName, // setter: argument
+                    $virtualArrayGetter
+                );
+            $functionsAndProperties = trim($functionsAndProperties);
+        }
 
-      $returnTypesGetter = $this->properties[$propertyName]['strictTypes'];
-      if ($isLazySingleObjectRelation && str_contains($returnTypesGetter, 'LazyLoadingProxy')) {
-          $typeNamesGetter = explode('|', $returnTypesGetter);
-          $typeNamesGetter = array_filter(
-              $typeNamesGetter,
-              fn (string $name) => $name !== 'LazyLoadingProxy'
-          );
-          $returnTypesGetter = implode('|', $typeNamesGetter);
-      }
+        $classNameParts = explode('\\', $className);
+        $classShortName = array_pop($classNameParts);
+        $namespace = implode('\\', $classNameParts);
+        $this->registerUseStatement($parentClass, 'ParentClass');
 
-      $upperCasePropertyName = ucfirst($propertyName);
-      $functionsAndProperties .= PHP_EOL . sprintf(
-        self::PROPERTY_TEMPLATE,
-        $upperCasePropertyName, // getter: Name
-        $returnType ? ': ' . $this->standadizeUnionTypes($returnTypesGetter) : '', // getter: return type
-        $propertyName . ($isLazySingleObjectRelation ? ' instanceof LazyLoadingProxy ? $this->' . $propertyName . '->_loadRealInstance() : $this->' . $propertyName : ''),
-        $upperCasePropertyName, // setter: name
-        $returnType ? $this->standadizeUnionTypes($this->properties[$propertyName]['strictTypes']) . ' ' : '', // setter: Argument type
-        '$' . $propertyName . ($isSingleObjectRelation ? ' = null' : ''),
-        ': void', // setter: return type
-        $propertyName, // setter: property name
-        '$' . $propertyName, // setter: argument
-        $virtualArrayGetter
-      );
-      $functionsAndProperties = trim($functionsAndProperties);
+        $classSourceCode = sprintf(
+            self::CLASS_TEMPLATE,
+            $this->strictTypes ? PHP_EOL . 'declare(strict_types=1);' . PHP_EOL : '',
+            $namespace,
+            $this->getUseStatements(),
+            $classShortName,
+            'ParentClass',
+            $this->getPropertiesString(),
+            $functionsAndProperties,
+            $this->strictTypes ? ': void' : '', // initialize objects: return type
+            $this->getInitializeStorageString()
+        );
+
+        $identifier = $identifier ?: sha1($className);
+        static::getGeneratedClassCache()->set($identifier, $classSourceCode);
+        return $classSourceCode;
     }
-
-    $classNameParts = explode('\\', $className);
-    $classShortName = array_pop($classNameParts);
-    $namespace = implode('\\', $classNameParts);
-    $this->registerUseStatement($parentClass, 'ParentClass');
-
-    $classSourceCode = sprintf(
-      self::CLASS_TEMPLATE,
-      PHP_EOL . 'declare(strict_types=1);' . PHP_EOL,
-      $namespace,
-      $this->getUseStatements(),
-      $classShortName,
-      'ParentClass',
-      $this->getPropertiesString(),
-      $functionsAndProperties,
-      ': void', // initialize objects: return type
-      $this->getInitializeStorageString()
-    );
-
-    $identifier = $identifier ?: sha1($className);
-    static::getGeneratedClassCache()->set($identifier, $classSourceCode);
-    return $classSourceCode;
-  }
 
     /**
      * Standadize union types
