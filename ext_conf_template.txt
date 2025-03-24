@@ -1,5 +1,5 @@
 # cat=basic/timeout/10; type=int; label=Client request timeout;Number of seconds the API client will wait for the remote server to respond. Zero means infinite wait.
-clientConnectTimeout = 10
+clientConnectTimeout = 20
 
 # cat=basic/timeout/20; type=int; label=Client transfer timeout;Number of seconds the API client will wait for the remote server to finish transferring data. Zero means infinite wait.
 clientTransferTimeout = 60
