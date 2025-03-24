@@ -19,6 +19,7 @@ use ReflectionException;
 use RuntimeException;
 use TYPO3\CMS\Core\Charset\CharsetConverter;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 use TYPO3\CMS\Core\Resource\Driver\LocalDriver;
 use TYPO3\CMS\Core\Resource\Exception\ExistingTargetFileNameException;
 use TYPO3\CMS\Core\Resource\Exception\ExistingTargetFolderException;
@@ -79,8 +80,11 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
     $object = null;
 
     // We have to do things the hard way, unfortunately. Because someone didn't implement a real Repository but declared the class a Repository anyway. Sigh.
-    $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file')->createQueryBuilder();
-    $query = $queryBuilder->select('uid')->from('sys_file')->where($queryBuilder->expr()->eq('remote_id', $queryBuilder->quote($objectId)))->setMaxResults(1);
+    $queryBuilder = $this->getQueryBuilderForTable('sys_file');
+    $query = $queryBuilder->select('uid')
+        ->from('sys_file')
+        ->where($queryBuilder->expr()->eq('remote_id', $queryBuilder->quote($objectId)))
+        ->setMaxResults(1);
     $record = $query->executeQuery()->fetchAssociative();
     if ($record) {
       $object = $repository->findByUid($record['uid']);
@@ -133,7 +137,7 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
    */
   protected function performSanityCheckBeforeDeletion(array $record): void
   {
-    $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file_reference')->createQueryBuilder();
+    $queryBuilder = $this->getQueryBuilderForTable('sys_file_reference');
     $query = $queryBuilder->select('*')
       ->from('sys_file_reference')
       ->where('uid_local = :fileUid AND deleted = 0')
@@ -190,7 +194,7 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
         continue;
       }
 
-      $queryBuilder = (new ConnectionPool())->getConnectionForTable($table)->createQueryBuilder();
+      $queryBuilder = $this->getQueryBuilderForTable($table);
       foreach ($queryBuilder->select(...$selectColumns)->from($table)->executeQuery()->fetchAllAssociative() as $record) {
         foreach ($collectedFieldNames as $fieldName) {
           $referredValues = [];
@@ -321,12 +325,13 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
     $download = !empty($targetFolder . $targetFilename);
     $file = null;
 
-    $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file')->createQueryBuilder();
+    $queryBuilder = $this->getQueryBuilderForTable('sys_file');
     $query = $queryBuilder->select('*')
       ->from('sys_file')
       ->where('remote_id = :objectId')
       ->setParameter('objectId', $objectId);
     $existingFileRows = $query->executeQuery();
+    $remoteModificationTime = 0;
 
     if ($folder->hasFile($targetFilename)) {
       $file = $this->searchFile($folder, $targetFilename);
@@ -362,7 +367,11 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
               // actual error. Any problem ranging from a missing file over file/folder permissions to user
               // restrictions may be in effect, all of which result in the same error. We target the "file is
               // missing" case specifically here since that's the case we are likely to encounter when renaming.
-              $queryBuilder->delete('sys_file')->where($queryBuilder->expr()->eq('uid', $existingFileRow['uid']))->executeStatement();
+              $queryBuilder->delete('sys_file')
+                  ->where(
+                      $queryBuilder->expr()->eq('uid', $existingFileRow['uid'])
+                  )
+                  ->executeStatement();
             } elseif ($existingFileRow['name'] === $targetFilename) {
               // Note: this case reached only if file physically exists and has the same name, due to check above.
               $file = $existingFile;
@@ -563,5 +572,18 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
       return null;
     }
     return $file;
+  }
+
+    /**
+     * Returns the QueryBuilder for a given table
+     *
+     * @param string $tableName
+     * @return QueryBuilder
+     */
+  protected function getQueryBuilderForTable(string $tableName): QueryBuilder
+  {
+      return GeneralUtility::makeInstance(ConnectionPool::class)
+          ->getConnectionForTable($tableName)
+          ->createQueryBuilder();
   }
 }
