@@ -20,7 +20,7 @@ use TYPO3\CMS\Extbase\Persistence\Repository;
  */
 class ModuleRepository extends Repository
 {
-  public function findOneByMappingClass($mappingClass)
+  public function findOneByMappingClass(string $mappingClass)
   {
     static $modulesByMappingClass = [];
     if (empty($modulesByMappingClass)) {
