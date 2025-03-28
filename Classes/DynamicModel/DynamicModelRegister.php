@@ -23,7 +23,7 @@ class DynamicModelRegister
     /**
      * @param string $modelClassName
      */
-    public static function registerModelForAutomaticHandling($modelClassName): void
+    public static function registerModelForAutomaticHandling(string $modelClassName): void
     {
         if (!in_array($modelClassName, static::$handledModelClasses)) {
             $segments = explode('\\', $modelClassName);
@@ -40,7 +40,7 @@ class DynamicModelRegister
     /**
      * @return array
      */
-    public static function getModelClassNamesRegisteredForAutomaticHandling()
+    public static function getModelClassNamesRegisteredForAutomaticHandling(): array
     {
         return static::$handledModelClasses;
     }
@@ -49,7 +49,7 @@ class DynamicModelRegister
      * @param string $modelClassName
      * @return bool
      */
-    public static function isModelRegisteredForAutomaticHandling($modelClassName)
+    public static function isModelRegisteredForAutomaticHandling(string $modelClassName): bool
     {
         return in_array($modelClassName, static::$handledModelClasses);
     }
@@ -70,7 +70,7 @@ class DynamicModelRegister
      * @param string $originalType
      * @return mixed
      */
-    public static function getOverriddenOrOriginalSqlType($table, $column, $originalType)
+    public static function getOverriddenOrOriginalSqlType(string $table, string $column, string $originalType)
     {
         return static::$overriddenSqlTypes[$table][$column] ?? $originalType;
     }
@@ -79,7 +79,7 @@ class DynamicModelRegister
      * @param string $modelClassName
      * @param string|null $propertyName
      */
-    public static function registerLazyModelProperty($modelClassName, $propertyName = null): void
+    public static function registerLazyModelProperty(string $modelClassName, string|null $propertyName = null): void
     {
         $propertyName = $propertyName ?? '_all';
         static::$lazyProperties[$modelClassName][$propertyName] = $propertyName;
@@ -87,10 +87,10 @@ class DynamicModelRegister
 
     /**
      * @param string $modelClassName
-     * @param string $propertyName
+     * @param string|null $propertyName
      * @return bool
      */
-    public static function isLazyProperty($modelClassName, $propertyName = null)
+    public static function isLazyProperty(string $modelClassName, string|null$propertyName = null): bool
     {
         $propertyName = $propertyName ?? '_all';
         return isset(static::$lazyProperties[$modelClassName][$propertyName]) || isset(static::$lazyProperties[$modelClassName]['_all']);
