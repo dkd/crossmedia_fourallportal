@@ -3,6 +3,7 @@
 namespace Crossmedia\Fourallportal\Service;
 
 use Crossmedia\Fourallportal\DynamicModel\DynamicModelGenerator;
+use Crossmedia\Fourallportal\DynamicModel\DynamicModelRegister;
 use Crossmedia\Fourallportal\Error\ApiException;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
@@ -220,7 +221,7 @@ NOTICE;
         if ($entityClassName) {
             $entityClassNames = [$entityClassName];
         } else {
-            $entityClassNames = $this->dynamicModelGenerator->getModelClassNamesRegisteredForAutomaticHandling();
+            $entityClassNames = DynamicModelRegister::getModelClassNamesRegisteredForAutomaticHandling();
         }
         return $entityClassNames;
     }
