@@ -10,6 +10,7 @@ use Crossmedia\Fourallportal\Error\ApiException;
 use Crossmedia\Fourallportal\Mapping\MappingRegister;
 use RuntimeException;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use TYPO3\CMS\Core\Cache\CacheManager;
 use TYPO3\CMS\Core\Cache\Exception\NoSuchCacheException;
 use TYPO3\CMS\Core\Cache\Frontend\AbstractFrontend;
@@ -37,7 +38,7 @@ use TYPO3\CMS\Extbase\Persistence\ObjectStorage;
  */
 class DynamicModelGenerator
 {
-    protected const RELATION_TABLE_MAX_LENGTH = 52;
+    protected const RELATION_TABLE_MAX_LENGTH = 51;
     protected const CLASS_TEMPLATE = <<< TEMPLATE
 %s
 /*
@@ -97,6 +98,43 @@ TEMPLATE;
 
 %s
 TEMPLATE;
+
+    protected const RELATION_TABLE_TEMPLATE = <<< TEMPLATE
+CREATE TABLE %s (
+    uid_local int(11) DEFAULT '0' NOT NULL,
+    uid_foreign int(11) DEFAULT '0' NOT NULL,
+    sorting int(11) DEFAULT '0' NOT NULL,
+    sorting_foreign int(11) DEFAULT '0' NOT NULL,
+
+    KEY uid_local (uid_local),
+    KEY uid_foreign (uid_foreign)
+);
+
+TEMPLATE;
+
+    protected const RELATION_TABLE_TEMPLATE_WITH_UID = <<< TEMPLATE
+CREATE TABLE %s (
+    uid INT(11) NOT NULL auto_increment,
+
+    uid_local int(11) DEFAULT '0' NOT NULL,
+    uid_foreign int(11) DEFAULT '0' NOT NULL,
+    sorting int(11) DEFAULT '0' NOT NULL,
+    sorting_foreign int(11) DEFAULT '0' NOT NULL,
+
+    PRIMARY KEY (uid),
+    KEY uid_local (uid_local),
+    KEY uid_foreign (uid_foreign)
+);
+
+TEMPLATE;
+
+    /**
+     * List of column names that are not allowed to be used as opposite fieldnames
+     * This needs to be configured since the current API version does not delievered enough information
+     * to build a proper relation.
+     */
+    protected const RELATION_DISSALLOWED_OPPOSITE_FIELD = ['uid', 'pid'];
+
     protected const RELATION_TYPE_NONE = 1;
     protected const RELATION_TYPE_SINGLE = 2;
     protected const RELATION_TYPE_MULTI = 3;
@@ -114,22 +152,25 @@ TEMPLATE;
     private array $usedClasses = [];
     private array $properties = [];
     private array $objectStorageProperties = [];
+    private array $moduleCache = [];
+    private array $moduleFieldConfigurationCache = [];
+    private array $relationData = [];
     private bool $strictTypes = false;
     private bool $readOnly = false;
 
     private OutputInterface|null $output = null;
 
     /**
-   * @param ServerRepository $serverRepository
-   * @param DataMapper $dataMapper
-   * @param PersistenceManager $persistenceManager
-   */
-  public function __construct(
-    protected ServerRepository $serverRepository,
-    protected DataMapper         $dataMapper,
-    protected PersistenceManager $persistenceManager
-  ) {
-  }
+     * @param ServerRepository $serverRepository
+     * @param DataMapper $dataMapper
+     * @param PersistenceManager $persistenceManager
+     */
+    public function __construct(
+        protected ServerRepository $serverRepository,
+        protected DataMapper $dataMapper,
+        protected PersistenceManager $persistenceManager
+    ) {
+    }
 
     public function setOutputInterface(OutputInterface $output): void
     {
@@ -162,794 +203,969 @@ TEMPLATE;
         return $this;
     }
 
-  /**
-   * @param array $modules
-   * @return array
-   * @throws Exception
-   */
-  public function generateSchemasForModules(array $modules): array
-  {
-    $sqlString = [];
-    $manyToManyRelations = [];
-    $configuredDynamicModels = DynamicModelRegister::getModelClassNamesRegisteredForAutomaticHandling();
-    $configuredDynamicModels = array_combine($configuredDynamicModels, $configuredDynamicModels);
+    /**
+     * @param array $modules
+     * @return array
+     * @throws Exception
+     */
+    public function generateSchemasForModules(array $modules): array
+    {
+        $sqlString = [];
+        $manyToManyRelations = [];
+        $configuredDynamicModels = DynamicModelRegister::getModelClassNamesRegisteredForAutomaticHandling();
+        $configuredDynamicModels = array_combine($configuredDynamicModels, $configuredDynamicModels);
 
-    foreach ($modules as $module) {
-      $entityClassName = $module->getMapper()->getEntityClassName();
-      $isAutomatedModel = DynamicModelRegister::isModelRegisteredForAutomaticHandling($entityClassName);
+        foreach ($modules as $module) {
+            $entityClassName = $module->getMapper()->getEntityClassName();
+            $isAutomatedModel = DynamicModelRegister::isModelRegisteredForAutomaticHandling($entityClassName);
 
-      $propertyConfigurations = $this->getPropertyConfigurationFromConnector($module);
-      if (empty($propertyConfigurations) && !$isAutomatedModel) {
-        continue;
-      }
-
-      $tableName = $this->dataMapper->getDataMap($entityClassName)->getTableName();
-      if ($isAutomatedModel) {
-        unset($configuredDynamicModels[$entityClassName]);
-        $lines = $this->automaticSchemaColumns;
-      } else {
-        $lines = [];
-      }
-
-      foreach ($propertyConfigurations as $propertyConfiguration) {
-        $dataType = DynamicModelRegister::getOverriddenOrOriginalSqlType($tableName, $propertyConfiguration['column'], $propertyConfiguration['schema']);
-        $lines[] = $propertyConfiguration['column'] . ' ' . $dataType;
-        if (isset($propertyConfiguration['config']['MM'])) {
-          $manyToManyRelations[] = $propertyConfiguration['config']['MM'];
-        }
-      }
-
-      if ($isAutomatedModel) {
-        $lines = array_merge($lines, $this->automaticSchemaKeys);
-      }
-      $lines = array_map(
-        fn (string $line) => "    " . $line,
-        $lines
-      );
-      $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');'. PHP_EOL;
-    }
-
-    // Iterate dynamic model classes which were NOT handled by a configured module.
-    // This is done to ensure that the schema exists even if the connector module is not yet configured.
-    foreach ($configuredDynamicModels as $entityClassName) {
-      $tableName = $this->dataMapper->getDataMap($entityClassName)->getTableName();
-      $lines = array_merge($this->automaticSchemaColumns, $this->automaticSchemaKeys);
-      $lines = array_map(
-        fn (string $line) => "    " . $line,
-        $lines
-      );
-      $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');'. PHP_EOL;
-    }
-
-    return $sqlString;
-  }
-
-  /**
-   * @param string $extensionKey
-   * @param string $tableName
-   * @return string
-   */
-  protected function findIconFile(string $extensionKey, string $tableName): string
-  {
-    $extensions = ['svg', 'png', 'jpg', 'jpeg', 'gif'];
-    $detectedFiles = GeneralUtility::getFilesInDir(
-      ExtensionManagementUtility::extPath($extensionKey, 'Resources/Public/Icons/'),
-      implode(',', $extensions)
-    );
-    foreach ($detectedFiles as $file) {
-      if (in_array(pathinfo($file, PATHINFO_EXTENSION), $extensions)) {
-        return $file;
-      }
-    }
-
-    return $tableName . '.svg';
-  }
-
-  /**
-   * @param string $modelClassName
-   * @return array
-   * @throws ApiException
-   * @throws Exception
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  public function generateAutomaticTableConfigurationForModelClassName(string $modelClassName): array
-  {
-    $modelClassNameParts = explode('\\', substr($modelClassName, 0, strpos($modelClassName, '\\Domain\\Model\\')));
-    $extensionName = array_pop($modelClassNameParts);
-    $extensionKey = GeneralUtility::camelCaseToLowerCaseUnderscored($extensionName);
-    $tableName = GeneralUtility::makeInstance(DataMapper::class)->getDataMap($modelClassName)->getTableName();
-
-    $tca = include ExtensionManagementUtility::extPath('fourallportal', 'Configuration/TCA/BoilerPlate/AutomaticTableConfiguration.php');
-    $additionalColumns = $this->generateTableConfigurationForModuleIdentifiedByModelClassName($modelClassName);
-    $additionalColumnNames = implode(',', array_keys($additionalColumns));
-    $detectedIconFile = $this->findIconFile($extensionKey, $tableName);
-    $tca['columns'] = array_replace($additionalColumns, $tca['columns']);
-    $tca['types']['1']['showitem'] .= ',' . $additionalColumnNames;
-    $tca['columns']['l10n_parent']['config']['foreign_table'] = $tableName;
-    $tca['columns']['l10n_parent']['config']['foreign_table_where'] = str_replace(
-      '###TABLE###',
-      $tableName,
-      $tca['columns']['l10n_parent']['config']['foreign_table_where']
-    );
-    $tca['ctrl']['label'] = key($additionalColumns);
-    $tca['ctrl']['iconfile'] = 'EXT:' . $extensionKey . '/Resources/Public/Icons/' . $tableName . '.' . pathinfo($detectedIconFile, PATHINFO_EXTENSION);
-    $tca['ctrl']['title'] = 'LLL:EXT:' . $extensionKey . '/Resources/Private/Language/locallang.xlf:' . $tableName;
-    return $tca;
-  }
-
-  /**
-   * @param string $modelClassName
-   * @return array
-   * @throws ApiException
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  public function generateTableConfigurationForModuleIdentifiedByModelClassName(string $modelClassName): array
-  {
-    $cacheManager = $this->getGeneratedClassCache();
-    $modelClassName = ltrim($modelClassName, '\\');
-
-    $columns = [];
-    foreach ($this->getAllConfiguredModules() as $module) {
-      $entityClassName = ltrim($module->getMapper()->getEntityClassName(), '\\');
-      if ($entityClassName === $modelClassName) {
-        $propertyConfigurations = $this->getPropertyConfigurationFromConnector($module);
-        foreach ($propertyConfigurations as $propertyConfiguration) {
-          if ($this->readOnly) {
-            $propertyConfiguration['config']['readOnly'] = true;
-          }
-          $columns[$propertyConfiguration['column']] = [
-            'label' => 'Automatic model field: ' . $propertyConfiguration['column'],
-            'exclude' => true,
-            'config' => $propertyConfiguration['config']
-          ];
-        }
-      }
-    }
-    return $columns;
-  }
-
-  /**
-   * @param array $parameters
-   * @return void
-   */
-  public function regenerateModelsAfterCacheFlush(array $parameters): void
-  {
-    if (in_array($parameters['cacheCmd'] ?? false, ['all', 'system'])) {
-      $this->generateAbstractModelsForAllModules();
-    }
-  }
-
-  /**
-   * @param bool $safeMode
-   * @return void
-   * @throws ApiException
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  public function generateAbstractModelsForAllModules(bool $safeMode = false): void
-  {
-    // Loop 1: generate fallbacks
-    foreach ($this->getAllConfiguredModules() as $module) {
-      if (!$module->isEnableDynamicModel()) {
-        continue;
-      }
-      if (class_exists($module->getMapper()->getEntityClassName()) || class_exists($module->getMapper()->getEntityClassName())) {
-        continue;
-      }
-      $this->generateAbstractModelForModule($module, true);
-    }
-    if ($safeMode === false) {
-      // Loop 2: generate actual classes, which require the presence of the fallback in order for the data map to work
-      foreach ($this->getAllConfiguredModules() as $module) {
-        if (!$module->isEnableDynamicModel() || class_exists($module->getMapper()->getEntityClassName())) {
-          continue;
-        }
-        $this->generateAbstractModelForModule($module);
-      }
-    }
-  }
-
-  /**
-   * Generates one abstract model class based on properties
-   * of the Module. Generates the class in two steps:
-   *
-   * 1. A completely safe fallback that has none of the
-   *    properties read from the remote API, generated
-   *    before any of the properties are analysed. If a
-   *    property can't be converted to safe PHP/SQL then
-   *    the generation exists and the fallback is kept.
-   * 2. The actual class with all properties as read from
-   *    the remote API.
-   *
-   * The two-step generation ensures that even if the second
-   * step with dynamic properties fail (perhaps due to logic
-   * errors or connectivity issues) a safe fallback is
-   * guaranteed to exist and be loadable through the
-   * loadAbstractClass() method on this class.
-   *
-   * @param Module $module
-   * @param bool $asFallback
-   * @return string
-   * @throws ApiException
-   */
-  public function generateAbstractModelForModule(Module $module, bool $asFallback = false): string
-  {
-    $repository = $module->getMapper()->getObjectRepository();
-
-    $entityClassName = substr(str_replace('\\Domain\\Repository\\', '\\Domain\\Model\\', get_class($repository)), 0, -10);
-    $entityClassNameParts = explode('\\', $entityClassName);
-    $classNameWithoutNamespace = array_pop($entityClassNameParts);
-    $abstractModelClassName = implode('\\', $entityClassNameParts) . '\\Abstract' . $classNameWithoutNamespace;
-
-    if ($asFallback) {
-      // Phase 1: create a safe fallback that has none of the properties returned from the API.
-      // This class is generated at a time in the process where errors based on remote API data
-      // have not yet been raised - as long as the local code base is intact, this class can be
-      // generated and trusted.
-      $sourceCode = $this->generateCachedClassFile(
-          $abstractModelClassName,
-          AbstractEntity::class,
-          [],
-          sha1($abstractModelClassName) . '_fallback'
-      );
-    } else {
-      // Phase 2: the more risky dynamic model with properties read from the remote API. If any
-      // properties returned from the API are unsupported or otherwise can't be expressed as safe
-      // PHP/SQL representations, either errors will be raised or the remaining safe properties
-      // will be written - depending on the context of the TYPO3 site (Development = errors thrown)
-      $propertyConfiguration = $this->getPropertyConfigurationFromConnector($module);
-
-      $propertyConfiguration['remoteId'] = [
-        "column" => "remote_id",
-        "type" => "string",
-        "schema" => "varchar(64) default ''",
-        "config" => [
-          "type" => "input",
-          "size" => 64
-        ]
-      ];
-      $propertyConfiguration['l10nParent'] = [
-        "column" => 'l10n_parent',
-        "type" => '\\' . $entityClassName,
-        "schema" => "INT(11) DEFAULT '0' NOT NULL",
-        "config" => [
-          "type" => "passthrough"
-        ]
-      ];
-
-      $sourceCode = $this->generateCachedClassFile(
-          $abstractModelClassName,
-          AbstractEntity::class,
-          $propertyConfiguration
-      );
-    }
-    return $sourceCode;
-  }
-
-  /**
-   * @param string $className
-   * @param bool $safe
-   * @throws RuntimeException
-   */
-  public static function loadAbstractClass(string $className, bool $safe = true): void
-  {
-    // The first check allows autoload to happen. This is done in order to make it possible to
-    // opt out from the dynamic models by simply adding your own base class which uses this name.
-    if (class_exists($className)) {
-      return;
-    }
-    $identifier = sha1($className);
-    $cache = static::getGeneratedClassCache();
-    $cache->requireOnce($identifier);
-
-    if (!class_exists($className, false)) {
-      // We will attempt to recreate *all* model classes now since one missing class very likely
-      // means all classes are missing. However, this may not be possible to do at the time when
-      // this code is executed in the runtime - so we catch and suppress errors and instead throw
-      // a RuntimeException asking the administrator to manually regenerate the classes. Note that
-      // when this exception is thrown, simply calling another piece of code may cause the classes
-      // to be regenerated correctly.
-      try {
-        GeneralUtility::makeInstance(static::class)->generateAbstractModelsForAllModules($safe);
-        $cache->requireOnce($identifier . '_fallback');
-      } catch (RuntimeException $error) {
-        // Suppressed, see above.
-      }
-    }
-
-    if (!class_exists($className, false)) {
-
-      try {
-        $cache->requireOnce($identifier . '_fallback');
-        // Attempt to load the fallback class which should be completely safe and always present even if
-        // the generated class with properties from the remote API could not be loaded. Check the TYPO3
-        // application context first of all - if we are in Development context, throw an error instead of
-        // silently allowing the base class to load. This is done in order to protect Production systems
-        // from potentially uncaught exceptions or complete failures when trying to use the models.
-        // Using the model classes is then possible, but none of the dynamic properties can be retrieved.
-        if (Environment::getContext()->isDevelopment()) {
-          throw new RuntimeException(
-            sprintf(
-              'Attempting to load the dynamically generated class "%s" caused the fallback class to be ' .
-              'resolved. Since your TYPO3 site is in Development application context you see this error ' .
-              'to inform you that there is a possible lack of support for the returned properties that you ' .
-              'should address in the code before you let it deploy to production.',
-              $className
-            ), 1865166438
-          );
-        }
-      } catch (RuntimeException $error) {
-        // Suppressed; if even the fallback class can't load, the standard reason below will be given.
-      }
-    }
-
-    // Final check - if the class wasn't loaded by now, that's a fatal error.
-    if (!class_exists($className, false)) {
-      throw new RuntimeException(
-        sprintf('Dynamic Fourall class "%s" could not be loaded, please regenerate classes!', $className), 2136459203
-      );
-    }
-  }
-
-  /**
-   * Return an array of for example:
-   *
-   *     ['propertyNameInModel' => ['type' => 'string', 'column' => 'sql_column_name', 'schema' => 'varchar(255) default \'\' not null', 'config' => $tcaConfigArray]
-   *
-   * - one for each of the properties returned from the remote API.
-   *
-   * @param Module $module
-   * @return array
-   * @throws ApiException
-   */
-  protected function getPropertyConfigurationFromConnector(Module $module)
-  {
-    $properties = [];
-    $moduleConfiguration = $module->getModuleConfiguration();
-    $connectorConfiguration = $module->getConnectorConfiguration();
-    $entityClassName = $module->getMapper()->getEntityClassName();
-
-    $fieldsAndRelations = array_replace_recursive(
-      array_intersect_assoc(
-        $moduleConfiguration['field_conf'],
-        $connectorConfiguration['fieldsToLoad']
-      ),
-      $moduleConfiguration['relation_conf']
-    );
-
-    uasort($fieldsAndRelations, function ($a, $b) {
-      //return ($a['field'] ?? $a['name']) <=> ($b['field'] ?? $b['name']);
-      return $a['name'] <=> $b['name'];
-    });
-
-    $validModuleNames = [];
-    foreach ($module->getServer()->getModules() as $configuredModule) {
-      $validModuleNames[] = $configuredModule->getModuleName();
-    }
-
-    foreach ($fieldsAndRelations as $originalName => $fieldConfiguration) {
-
-      // We need to reset a possibly overridden types so they use the *module* configuration's list of fields and
-      // types as the actual type of the field. This is important to the subsequent logic!
-      if (!empty($moduleConfiguration['field_conf'][$originalName]['type'])) {
-        $fieldConfiguration['type'] = $moduleConfiguration['field_conf'][$originalName]['type'];
-      }
-
-      //$fieldName = $fieldConfiguration['field'] ?? $fieldConfiguration['name'];
-      //$fieldName = $this->resolveFieldName($fieldConfiguration);
-      $fieldName = $originalName;
-      $propertyName = GeneralUtility::underscoredToLowerCamelCase($fieldName);
-      if ($this->output?->isVerbose() ?? false) {
-          $this->output?->writeln('Generating: ' . $module->getModuleName() . '->' . $entityClassName . '->' . $propertyName);
-      }
-
-      try {
-        if ($this->isSkippedField($module, $originalName, $fieldConfiguration, $validModuleNames)) {
-          continue;
-        }
-
-        list ($type, $schema, $tca) = $this->guessLocalTypesFromRemoteField($originalName, $fieldConfiguration, $module->getModuleName());
-          if ($this->output?->isVerbose() ?? false) {
-            $this->output?->writeln('(' . $fieldConfiguration['type'] . ', ' . $type . ', ' . $schema . ')');
-          }
-
-        $properties[$propertyName] = [
-          'column' => $fieldName,
-          'type' => $type,
-          'schema' => $schema,
-          'config' => $tca
-        ];
-      } catch (UndefinedModuleException $error) {
-          $this->output?->writeln(' !!!SKIPPED!!! ' . $error->getMessage());
-      } catch (RuntimeException $error) {
-          $this->output?->writeln(' !!!SKIPPED!!! ' . $error->getMessage());
-        if (Environment::getContext()->isDevelopment()) {
-          throw $error;
-        }
-      }
-    }
-
-    return $properties;
-  }
-
-  /**
-   * @param string $originalName
-   * @param array $fieldConfiguration
-   * @param string $currentSideModuleName Module name for the side of the relation we are currently processing
-   * @return array
-   * @throws Exception
-   */
-  protected function guessLocalTypesFromRemoteField(string $originalName, array $fieldConfiguration, string $currentSideModuleName): array
-  {
-    $textFieldTypes = ['CEText', 'MAMString', 'XMPString'];
-    if (array_key_exists('fulltext', $fieldConfiguration) && in_array($fieldConfiguration['type'], $textFieldTypes)) {
-      // Shortcut: any fulltext/text typed fields will be "string" in class property and "text" in SQL
-      return [
-          'string',
-          'text',
-          [
-              'type' => 'text'
-          ]
-      ];
-    }
-
-    //$fieldName = $this->resolveFieldName($fieldConfiguration);
-    $fieldName = $originalName;
-
-    $dataType = $sqlType = null;
-    $tca = [
-      'type' => 'passthrough'
-    ];
-
-    switch ($fieldConfiguration['type']) {
-      case 'CEVarchar':
-        $dataType = 'string';
-        $sqlType = 'text';
-        $tca = [
-          'type' => 'input',
-          'size' => $fieldConfiguration['length']
-        ];
-        break;
-      case 'MAMDate':
-      case 'CEDate':
-        $dataType = '\\DateTime';
-        $sqlType = 'int(11) DEFAULT 0 NOT NULL';
-        $tca = [
-            'type' => 'datetime',
-        ];
-        break;
-      case 'MAMBoolean';
-      case 'CEBoolean':
-        $dataType = 'bool';
-        $sqlType = 'int(1) DEFAULT 0 NOT NULL';
-        $tca = [
-          'type' => 'check'
-        ];
-        break;
-      case 'CEDouble':
-        $dataType = 'float';
-        $sqlType = 'double(10,6) DEFAULT 0.0 NOT NULL';
-        $tca = [
-            'type' => 'number',
-            'format' => 'decimal'
-        ];
-        break;
-      case 'CELong':
-        $dataType = 'int';
-        $sqlType = 'bigint(20) DEFAULT 0 NOT NULL';
-        $tca = [
-            'type' => 'number',
-        ];
-        break;
-      case 'CETimestamp':
-      case 'CEInteger':
-      case 'MAMNumber':
-      case 'XMPNumber':
-        $dataType = 'int';
-        $sqlType = 'int(11) DEFAULT 0 NOT NULL';
-        $tca = [
-            'type' => 'number',
-        ];
-        break;
-      case 'MAMList':
-      case 'CEVarcharList':
-        $dataType = 'array';
-        $sqlType = 'text';
-        break;
-      case 'FIELD_LINK':
-      case 'CEExternalIdList':
-      case 'CEIdList':
-      case 'MANY_TO_MANY':
-      case 'ONE_TO_MANY':
-      case 'MANY_TO_ONE':
-        //case 'ONE_TO_ONE':
-      case 'CEExternalId':
-        $modules = $this->getAllConfiguredModules();
-        if (!empty($fieldConfiguration['modules'])) {
-          $relatedModule = reset($fieldConfiguration['modules']);
-        } elseif (!empty($fieldConfiguration['relatedModule'])) {
-          $relatedModule = $fieldConfiguration['relatedModule'];
-        } elseif (($fieldConfiguration['parent'] ?? false) === $currentSideModuleName) {
-          $relatedModule = $fieldConfiguration['child'];
-        } else {
-          $relatedModule = $fieldConfiguration['parent'];
-        }
-        if (!isset($modules[$relatedModule])) {
-          throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined', 8646815387);
-        }
-        $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
-        $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
-        $entityClassName = $modules[$relatedModule]->getMapper()->getEntityClassName();
-        $tca = $this->determineTableConfigurationForRelation($fieldName, $fieldConfiguration, $currentSideModuleName, $tableNameParent);
-        $dataType = '\\' . ObjectStorage::class . '<\\' . $entityClassName . '>';
-        $sqlType = 'int(11) DEFAULT 0 NOT NULL';
-        break;
-      case 'CEId':
-        //case 'CEExternalId':
-      case 'ONE_TO_ONE':
-        $modules = $this->getAllConfiguredModules();
-        if (!empty($fieldConfiguration['modules'])) {
-          $relatedModule = reset($fieldConfiguration['modules']);
-        } elseif (!empty($fieldConfiguration['relatedModule'])) {
-          $relatedModule = $fieldConfiguration['relatedModule'];
-        } elseif (($fieldConfiguration['parent'] ?? false) === $currentSideModuleName) {
-          $relatedModule = $fieldConfiguration['child'];
-        } else {
-          $relatedModule = $fieldConfiguration['parent'];
-        }
-        if (!isset($modules[$relatedModule])) {
-          throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined', 2321076760);
-        }
-        $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
-        $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
-        $entityClassName = $entityClassName ?? $modules[$relatedModule]->getMapper()->getEntityClassName();
-        $tca = $this->determineTableConfigurationForRelation($fieldName, $fieldConfiguration, $currentSideModuleName, $tableNameParent);
-        if ($relatedModule === 'file') {
-          $dataType = '\\' . ObjectStorage::class . '<\\' . $entityClassName . '>';
-        }
-        $dataType = $dataType ?? ('\\' . $entityClassName);
-        $sqlType = 'int(11) DEFAULT 0 NOT NULL';
-        break;
-      default:
-        break;
-    }
-
-    if (!$dataType && !$sqlType) {
-      // The field was not of a standard type and is most likely a "ComplexType".
-
-      $modules = $this->getAllConfiguredModules();
-      $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
-      $entityShortNameParent = GeneralUtility::camelCaseToLowerCaseUnderscored(substr($entityNameParent, strrpos($entityNameParent, '\\') + 1));
-      $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
-      $dataType = '\\' . ComplexType::class;
-      $sqlType = 'int(11) DEFAULT 0 NOT NULL';
-      $tca = [
-        'type' => 'select',
-        'renderType' => 'selectSingle',
-        'foreign_table' => 'tx_fourallportal_domain_model_complextype',
-        'size' => 1,
-        //'foreign_field' => 'parent_uid',
-        //'foreign_match_fields' => [
-        //    'table_name' => $tableNameParent,
-        //    'field_name' => $fieldName,
-        //],
-        //'foreign_table_field' => 'table_name',
-        //'foreign_table_field' => $entityShortNameParent,
-        'maxitems' => 1
-      ];
-    }
-
-    return [
-      $dataType,
-      $sqlType,
-      $tca
-    ];
-  }
-
-  /**
-   * Attempts to determine a valid TCA configuration expressing
-   * a relationship (which is required for TYPO3 to handle the
-   * relation correctly).
-   *
-   * A valid relation is determined by the presence of a connector
-   * in the TYPO3 system which handles the module associated with
-   * the relation. If such a connector exists, it contains the
-   * information necessary to determine which object the relation
-   * points to and which relationship type it uses - and thus it
-   * becomes possible to create the TCA that is required.
-   *
-   * If a relation is considered invalid due to a missing connector
-   * an Exception is thrown (and the error is either reported or
-   * ignored and the property skipped, depending on TYPO3 context).
-   *
-   * @param string $originalName
-   * @param array $fieldConfiguration
-   * @param string $currentSideModuleName Module name for the side of the relation we are currently processing
-   * @param string $currentTableName
-   * @return array
-   * @throws Exception
-   */
-  protected function determineTableConfigurationForRelation(
-      string $originalName,
-      array $fieldConfiguration,
-      string $currentSideModuleName,
-      string $currentTableName
-  ): array {
-    $overriddenType = null;
-    $modules = $this->getAllConfiguredModules();
-
-    //$fieldName = $this->resolveFieldName($fieldConfiguration);
-    $fieldName = $originalName;
-
-    if (!empty($fieldConfiguration['modules'])) {
-      $relatedModule = reset($fieldConfiguration['modules']);
-    } elseif (!empty($fieldConfiguration['relatedModule'])) {
-      $relatedModule = $fieldConfiguration['relatedModule'];
-    } elseif (($fieldConfiguration['parent'] ?? false) === $currentSideModuleName) {
-      $relatedModule = $fieldConfiguration['child'];
-    } else {
-      $relatedModule = $fieldConfiguration['parent'];
-    }
-
-    //if ($fieldConfiguration['relatedModule'] ?? false) {
-    if ($fieldConfiguration['type'] === 'CEExternalId') {
-      $overriddenType = 'ONE_TO_ONE';
-    } elseif ($fieldConfiguration['type'] === 'CEExternalIdList') {
-      $overriddenType = 'MANY_TO_MANY';
-    }
-    //}
-
-    try {
-      $tableNameParent = $entityNameParent = $entityShortNameParent = null;
-      if ($fieldConfiguration['parent'] ?? false) {
-        $this->validatePresenceOfConfiguredConnectorForModule($fieldConfiguration['parent']);
-        $entityNameParent = $modules[$fieldConfiguration['parent']]->getMapper()->getEntityClassName();
-        $entityShortNameParent = substr($entityNameParent, strrpos($entityNameParent, '\\') + 1);
-        $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
-      }
-    } catch (RuntimeException $error) {
-      throw new UndefinedModuleException(
-        sprintf(
-          'Field "%s" uses module "%s" as parent in a relation, but the parent module is unknown to TYPO3. ' .
-          'Please either configure a connector that uses the module, create a manual mapping for the field ' .
-          'or configure the field as ignored by the mapper.',
-          $fieldName,
-          $fieldConfiguration['parent']
-        ), 4816263978
-      );
-    }
-
-    try {
-      $this->validatePresenceOfConfiguredConnectorForModule($relatedModule);
-      $entityNameChild = $modules[$relatedModule]->getMapper()->getEntityClassName();
-      $tableNameChild = $this->dataMapper->getDataMap($entityNameChild)->getTableName();
-    } catch (RuntimeException $error) {
-      throw new UndefinedModuleException(
-        sprintf(
-          'Field "%s" uses module "%s" as child in a relation, but the child module is unknown to TYPO3. ' .
-          'Please either configure a connector that uses the module, create a manual mapping for the field ' .
-          'or configure the field as ignored by the mapper.',
-          $fieldName,
-          $fieldConfiguration['child']
-        ), 9274744073
-      );
-    }
-
-    $foreignTableName = $tableNameChild ?? $tableNameParent;
-      if (($foreignTableName ?? null) === 'sys_file_reference') {
-          /*
-           * TODO: Support options minitems and maxitems
-           *
-           * See: https://docs.typo3.org/m/typo3/reference-tca/12.4/en-us/ColumnsConfig/Type/File/Index.html
-           */
-          return [
-              'type' => 'file',
-          ];
-      }
-    $tca = [
-      'type' => 'select',
-      'renderType' => 'selectSingle',
-      'foreign_table' => $foreignTableName
-    ];
-
-    $fieldType = $overriddenType ?? $fieldConfiguration['type'];
-
-    switch ($fieldType) {
-      // M:N is expressed to TYPO3 as any other relation, but having an "MM" entry in the TCA containing a table name.
-      // This table can then be generated on-the-fly since all MM tables have the same default structure when written
-      // by this model generator class.
-      case 'CEExternalIdList':
-      case 'FIELD_LINK':
-      case 'CEIdList':
-      case 'MANY_TO_MANY':
-        unset($tca['renderType']);
-        $tca['type'] = 'group';
-        $tca['allowed'] = $foreignTableName;
-        $isLocalColumn = $currentSideModuleName === $fieldConfiguration['parent'];
-
-        if ($isLocalColumn) {
-            [$prefix, ] = explode('_domain_model_', $currentTableName, 2);
-            $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
-            /*
-             * The value of name contains the field name of the foreign column
-             * which is a combination of the value of 'child' and the prefix 'parent'
-             */
-            $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['name']);
-
-            /*
-             * Self referencing table required MM_opposite_field
-             */
-            if (GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName) !== GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field'])) {
-                $tca['MM_opposite_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
+            $propertyConfigurations = $this->getPropertyConfigurationFromConnector($module);
+            if (empty($propertyConfigurations) && !$isAutomatedModel) {
+                continue;
             }
-        } else {
-            [$prefix, ] = explode('_domain_model_', $foreignTableName, 2);
-            /*
-             * Set "MM_opposite_field" to indicate this M:N is mirrored by other TCA. To do so, we must determine if
-             * we are currently on the child side of the relation, in which case our field name comes from the child
-             * entity name, and comes from parent if the opposite is true.
-             *
-             * Important:
-             * The option 'MM_opposite_field' will prevent the generation of the relation table by TYPO3.
-             * Therefor the relation configuration must be done within the main record (parent) and the child record
-             */
-            $tca['MM_opposite_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
-            $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
-            $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+
+            $tableName = $this->dataMapper->getDataMap($entityClassName)->getTableName();
+            if ($isAutomatedModel) {
+                unset($configuredDynamicModels[$entityClassName]);
+                $lines = $this->automaticSchemaColumns;
+            } else {
+                $lines = [];
+            }
+
+            foreach ($propertyConfigurations as $propertyConfiguration) {
+                $dataType = DynamicModelRegister::getOverriddenOrOriginalSqlType($tableName, $propertyConfiguration['column'], $propertyConfiguration['schema']);
+                $lines[] = $propertyConfiguration['column'] . ' ' . $dataType;
+                if (isset($propertyConfiguration['config']['MM'])) {
+                    $manyToManyRelations[$propertyConfiguration['config']['MM']] = (bool)($propertyConfiguration['config']['MM_hasUidField'] ?? false);
+                }
+            }
+
+            if ($isAutomatedModel) {
+                $lines = array_merge($lines, $this->automaticSchemaKeys);
+            }
+            $lines = array_map(
+                fn(string $line) => "    " . $line,
+                $lines
+            );
+            $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');' . PHP_EOL;
         }
 
-        $tca['MM'] = $this->buildRelationTableName(
-            $prefix,
-            $columnNameLocal,
-            $columnNameForeign
+        // Iterate dynamic model classes which were NOT handled by a configured module.
+        // This is done to ensure that the schema exists even if the connector module is not yet configured.
+        foreach ($configuredDynamicModels as $entityClassName) {
+            $tableName = $this->dataMapper->getDataMap($entityClassName)->getTableName();
+            $lines = array_merge($this->automaticSchemaColumns, $this->automaticSchemaKeys);
+            $lines = array_map(
+                fn(string $line) => "    " . $line,
+                $lines
+            );
+            $sqlString[] = 'CREATE TABLE ' . $tableName . ' (' . PHP_EOL . implode(',' . PHP_EOL, $lines) . PHP_EOL . ');' . PHP_EOL;
+        }
+
+        $manyToManyRelationsKeys = array_keys($manyToManyRelations);
+
+        sort($manyToManyRelationsKeys);
+
+        // Process all queued MM table creations
+        foreach ($manyToManyRelationsKeys as $manyToManyTableName) {
+            if ($manyToManyRelations[$manyToManyTableName]) {
+                $sqlString[] = sprintf(self::RELATION_TABLE_TEMPLATE_WITH_UID, $manyToManyTableName);
+            } else {
+                $sqlString[] = sprintf(self::RELATION_TABLE_TEMPLATE, $manyToManyTableName);
+            }
+        }
+
+
+        return $sqlString;
+    }
+
+    /**
+     * @param string $extensionKey
+     * @param string $tableName
+     * @return string
+     */
+    protected function findIconFile(string $extensionKey, string $tableName): string
+    {
+        $extensions = ['svg', 'png', 'jpg', 'jpeg', 'gif'];
+        $detectedFiles = GeneralUtility::getFilesInDir(
+            ExtensionManagementUtility::extPath($extensionKey, 'Resources/Public/Icons/'),
+            implode(',', $extensions)
         );
-
-        /*
-         * Table names are not allowed to exceed 64 characters
-         * Since the database analyse may add the prefix `zzz_deleted_` this needs to be consider.
-         * Therefor the maximum size for table names is 52 characters
-         *
-         * See: https://dev.mysql.com/doc/refman/8.4/en/identifier-length.html
-         */
-        if (strlen($tca['MM']) > static::RELATION_TABLE_MAX_LENGTH) {
-            throw new \Exception('Table name "' . $tca['MM'] . '" exceeded allowed ' . static::RELATION_TABLE_MAX_LENGTH . ' characters');
+        foreach ($detectedFiles as $file) {
+            if (in_array(pathinfo($file, PATHINFO_EXTENSION), $extensions)) {
+                return $file;
+            }
         }
-        break;
 
-      // 1:N is expressed by setting a "foreign_field" to be used when matching records. In a 1:1 relation the "uid"
-      // column will always be used, but for 1:N we need to choose a different field. Which field this is, is
-      // determined by the entity name on the local side of the relation, e.g. if the parent is a class whose short
-      // name is "Product", the chosen column name will be "product"; if "ProductCategory" the chosen field name
-      // is "product_category" and so on. We include both 1:N and N:1 since to TYPO3 these are technically the same
-      // type, but expressing the "symmetric field" on the opposite side of the relation. We determine the target
-      // entity names by analyzing which Modules have Connectors that use Mappers which handle the entities.
-      case 'MANY_TO_ONE':
-      case 'ONE_TO_MANY':
-        $tca['foreign_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($entityShortNameParent) ?: $currentSideModuleName;
-        //$tca['symmetric_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($entityShortNameChild);
-        break;
-
-      // Fallback case; ONE_TO_ONE is the default type of relation
-      case 'ONE_TO_ONE':
-      default:
-        break;
+        return $tableName . '.svg';
     }
 
-    if (!($tca['foreign_table'] ?? false) && ($tca['type'] ?? false) !== 'group') {
-      throw new UndefinedModuleException(
-        sprintf(
-          'Field "%s" defines a CEExternalId or CEExternalIdList which does not configure a related module. ' .
-          'Normally this would mean that this field should be mapped to a plain string value, but due to the ' .
-          'ambiguity in target resource type, we require that you manually map or ignore this particular field.',
-          $fieldConfiguration['field']
-        ), 5649592310
-      );
+    /**
+     * @param string $modelClassName
+     * @return array
+     * @throws ApiException
+     * @throws Exception
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    public function generateAutomaticTableConfigurationForModelClassName(string $modelClassName): array
+    {
+        $modelClassNameParts = explode('\\', substr($modelClassName, 0, strpos($modelClassName, '\\Domain\\Model\\')));
+        $extensionName = array_pop($modelClassNameParts);
+        $extensionKey = GeneralUtility::camelCaseToLowerCaseUnderscored($extensionName);
+        $tableName = GeneralUtility::makeInstance(DataMapper::class)->getDataMap($modelClassName)->getTableName();
+
+        $tca = include ExtensionManagementUtility::extPath('fourallportal', 'Configuration/TCA/BoilerPlate/AutomaticTableConfiguration.php');
+        $additionalColumns = $this->generateTableConfigurationForModuleIdentifiedByModelClassName($modelClassName);
+        $additionalColumnNames = implode(',', array_keys($additionalColumns));
+        $detectedIconFile = $this->findIconFile($extensionKey, $tableName);
+        $tca['columns'] = array_replace($additionalColumns, $tca['columns']);
+        $tca['types']['1']['showitem'] .= ',' . $additionalColumnNames;
+        $tca['columns']['l10n_parent']['config']['foreign_table'] = $tableName;
+        $tca['columns']['l10n_parent']['config']['foreign_table_where'] = str_replace(
+            '###TABLE###',
+            $tableName,
+            $tca['columns']['l10n_parent']['config']['foreign_table_where']
+        );
+        $tca['ctrl']['label'] = key($additionalColumns);
+        $tca['ctrl']['iconfile'] = 'EXT:' . $extensionKey . '/Resources/Public/Icons/' . $tableName . '.' . pathinfo($detectedIconFile, PATHINFO_EXTENSION);
+        $tca['ctrl']['title'] = 'LLL:EXT:' . $extensionKey . '/Resources/Private/Language/locallang.xlf:' . $tableName;
+        return $tca;
     }
 
-    return $tca;
-  }
+    /**
+     * @param string $modelClassName
+     * @return array
+     * @throws ApiException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    public function generateTableConfigurationForModuleIdentifiedByModelClassName(string $modelClassName): array
+    {
+        $cacheManager = $this->getGeneratedClassCache();
+        $modelClassName = ltrim($modelClassName, '\\');
+
+        $columns = [];
+        foreach ($this->getAllConfiguredModules() as $module) {
+            $entityClassName = ltrim($module->getMapper()->getEntityClassName(), '\\');
+            if ($entityClassName === $modelClassName) {
+                $propertyConfigurations = $this->getPropertyConfigurationFromConnector($module);
+                foreach ($propertyConfigurations as $propertyConfiguration) {
+                    if ($this->readOnly) {
+                        $propertyConfiguration['config']['readOnly'] = true;
+                    }
+                    $columns[$propertyConfiguration['column']] = [
+                        'label' => 'Automatic model field: ' . $propertyConfiguration['column'],
+                        'exclude' => true,
+                        'config' => $propertyConfiguration['config']
+                    ];
+                }
+            }
+        }
+        return $columns;
+    }
+
+    /**
+     * @param array $parameters
+     * @return void
+     */
+    public function regenerateModelsAfterCacheFlush(array $parameters): void
+    {
+        if (in_array($parameters['cacheCmd'] ?? false, ['all', 'system'])) {
+            $this->generateAbstractModelsForAllModules();
+        }
+    }
+
+    /**
+     * @param bool $safeMode
+     * @return void
+     * @throws ApiException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    public function generateAbstractModelsForAllModules(bool $safeMode = false): void
+    {
+        // Loop 1: generate fallbacks
+        foreach ($this->getAllConfiguredModules() as $module) {
+            if (!$module->isEnableDynamicModel()) {
+                continue;
+            }
+            if (class_exists($module->getMapper()->getEntityClassName()) || class_exists($module->getMapper()->getEntityClassName())) {
+                continue;
+            }
+            $this->generateAbstractModelForModule($module, true);
+        }
+        if ($safeMode === false) {
+            // Loop 2: generate actual classes, which require the presence of the fallback in order for the data map to work
+            foreach ($this->getAllConfiguredModules() as $module) {
+                if (!$module->isEnableDynamicModel() || class_exists($module->getMapper()->getEntityClassName())) {
+                    continue;
+                }
+                $this->generateAbstractModelForModule($module);
+            }
+        }
+    }
+
+    /**
+     * Generates one abstract model class based on properties
+     * of the Module. Generates the class in two steps:
+     *
+     * 1. A completely safe fallback that has none of the
+     *    properties read from the remote API, generated
+     *    before any of the properties are analysed. If a
+     *    property can't be converted to safe PHP/SQL then
+     *    the generation exists and the fallback is kept.
+     * 2. The actual class with all properties as read from
+     *    the remote API.
+     *
+     * The two-step generation ensures that even if the second
+     * step with dynamic properties fail (perhaps due to logic
+     * errors or connectivity issues) a safe fallback is
+     * guaranteed to exist and be loadable through the
+     * loadAbstractClass() method on this class.
+     *
+     * @param Module $module
+     * @param bool $asFallback
+     * @return string
+     * @throws ApiException
+     */
+    public function generateAbstractModelForModule(Module $module, bool $asFallback = false): string
+    {
+        $repository = $module->getMapper()->getObjectRepository();
+
+        $entityClassName = substr(str_replace('\\Domain\\Repository\\', '\\Domain\\Model\\', get_class($repository)), 0, -10);
+        $entityClassNameParts = explode('\\', $entityClassName);
+        $classNameWithoutNamespace = array_pop($entityClassNameParts);
+        $abstractModelClassName = implode('\\', $entityClassNameParts) . '\\Abstract' . $classNameWithoutNamespace;
+
+        if ($asFallback) {
+            // Phase 1: create a safe fallback that has none of the properties returned from the API.
+            // This class is generated at a time in the process where errors based on remote API data
+            // have not yet been raised - as long as the local code base is intact, this class can be
+            // generated and trusted.
+            $sourceCode = $this->generateCachedClassFile(
+                $abstractModelClassName,
+                AbstractEntity::class,
+                [],
+                sha1($abstractModelClassName) . '_fallback'
+            );
+        } else {
+            // Phase 2: the more risky dynamic model with properties read from the remote API. If any
+            // properties returned from the API are unsupported or otherwise can't be expressed as safe
+            // PHP/SQL representations, either errors will be raised or the remaining safe properties
+            // will be written - depending on the context of the TYPO3 site (Development = errors thrown)
+            $propertyConfiguration = $this->getPropertyConfigurationFromConnector($module);
+
+            $propertyConfiguration['remoteId'] = [
+                "column" => "remote_id",
+                "type" => "string",
+                "schema" => "varchar(64) default ''",
+                "config" => [
+                    "type" => "input",
+                    "size" => 64
+                ]
+            ];
+            $propertyConfiguration['l10nParent'] = [
+                "column" => 'l10n_parent',
+                "type" => '\\' . $entityClassName,
+                "schema" => "INT(11) DEFAULT '0' NOT NULL",
+                "config" => [
+                    "type" => "passthrough"
+                ]
+            ];
+
+            $sourceCode = $this->generateCachedClassFile(
+                $abstractModelClassName,
+                AbstractEntity::class,
+                $propertyConfiguration
+            );
+        }
+        return $sourceCode;
+    }
+
+    /**
+     * @param string $className
+     * @param bool $safe
+     * @throws RuntimeException
+     */
+    public static function loadAbstractClass(string $className, bool $safe = true): void
+    {
+        // The first check allows autoload to happen. This is done in order to make it possible to
+        // opt out from the dynamic models by simply adding your own base class which uses this name.
+        if (class_exists($className)) {
+            return;
+        }
+        $identifier = sha1($className);
+        $cache = static::getGeneratedClassCache();
+        $cache->requireOnce($identifier);
+
+        if (!class_exists($className, false)) {
+            // We will attempt to recreate *all* model classes now since one missing class very likely
+            // means all classes are missing. However, this may not be possible to do at the time when
+            // this code is executed in the runtime - so we catch and suppress errors and instead throw
+            // a RuntimeException asking the administrator to manually regenerate the classes. Note that
+            // when this exception is thrown, simply calling another piece of code may cause the classes
+            // to be regenerated correctly.
+            try {
+                GeneralUtility::makeInstance(static::class)->generateAbstractModelsForAllModules($safe);
+                $cache->requireOnce($identifier . '_fallback');
+            } catch (RuntimeException $error) {
+                // Suppressed, see above.
+            }
+        }
+
+        if (!class_exists($className, false)) {
+
+            try {
+                $cache->requireOnce($identifier . '_fallback');
+                // Attempt to load the fallback class which should be completely safe and always present even if
+                // the generated class with properties from the remote API could not be loaded. Check the TYPO3
+                // application context first of all - if we are in Development context, throw an error instead of
+                // silently allowing the base class to load. This is done in order to protect Production systems
+                // from potentially uncaught exceptions or complete failures when trying to use the models.
+                // Using the model classes is then possible, but none of the dynamic properties can be retrieved.
+                if (Environment::getContext()->isDevelopment()) {
+                    throw new RuntimeException(
+                        sprintf(
+                            'Attempting to load the dynamically generated class "%s" caused the fallback class to be ' .
+                            'resolved. Since your TYPO3 site is in Development application context you see this error ' .
+                            'to inform you that there is a possible lack of support for the returned properties that you ' .
+                            'should address in the code before you let it deploy to production.',
+                            $className
+                        ), 1865166438
+                    );
+                }
+            } catch (RuntimeException $error) {
+                // Suppressed; if even the fallback class can't load, the standard reason below will be given.
+            }
+        }
+
+        // Final check - if the class wasn't loaded by now, that's a fatal error.
+        if (!class_exists($className, false)) {
+            throw new RuntimeException(
+                sprintf('Dynamic Fourall class "%s" could not be loaded, please regenerate classes!', $className), 2136459203
+            );
+        }
+    }
+
+    /**
+     * Return an array of for example:
+     *
+     *     ['propertyNameInModel' => ['type' => 'string', 'column' => 'sql_column_name', 'schema' => 'varchar(255) default \'\' not null', 'config' => $tcaConfigArray]
+     *
+     * - one for each of the properties returned from the remote API.
+     *
+     * @param Module $module
+     * @return array
+     * @throws ApiException
+     */
+    protected function getPropertyConfigurationFromConnector(Module $module): array
+    {
+        $this->registerModule($module);
+        $properties = [];
+        // Clear internal cache
+        $this->relationData = [];
+        $moduleConfiguration = $module->getModuleConfiguration();
+        $connectorConfiguration = $module->getConnectorConfiguration();
+        $entityClassName = $module->getMapper()->getEntityClassName();
+
+        $fieldsAndRelations = $this->getModuleFieldConfiguration($module->getModuleName());
+
+        uasort($fieldsAndRelations, function ($a, $b) {
+            //return ($a['field'] ?? $a['name']) <=> ($b['field'] ?? $b['name']);
+            return $a['name'] <=> $b['name'];
+        });
+
+        $validModuleNames = [];
+        foreach ($module->getServer()->getModules() as $configuredModule) {
+            $validModuleNames[] = $configuredModule->getModuleName();
+        }
+
+        $infoTableData = [];
+        if ($this->output instanceof SymfonyStyle && $this->output?->isVerbose() ?? false) {
+            $this->output->section('Generating: ' . $entityClassName . ' [' . $module->getModuleName() . ']');
+        }
+
+        $rowCounter = 0;
+
+        foreach ($fieldsAndRelations as $originalName => $fieldConfiguration) {
+            // We need to reset a possibly overridden types so they use the *module* configuration's list of fields and
+            // types as the actual type of the field. This is important to the subsequent logic!
+            if (!empty($moduleConfiguration['field_conf'][$originalName]['type'])) {
+                $fieldConfiguration['type'] = $moduleConfiguration['field_conf'][$originalName]['type'];
+            }
+
+            //$fieldName = $fieldConfiguration['field'] ?? $fieldConfiguration['name'];
+            //$fieldName = $this->resolveFieldName($fieldConfiguration);
+            $fieldName = $originalName;
+            $propertyName = GeneralUtility::underscoredToLowerCamelCase($fieldName);
+            $infoTableData[$rowCounter] = [
+                $propertyName, // property name
+                $fieldConfiguration['type'], // PIM data type
+                '', // class type
+                '', // SQL data type
+                'Proceed' // Status
+            ];
+            try {
+                if ($this->isSkippedField($module, $originalName, $fieldConfiguration, $validModuleNames)) {
+                    $infoTableData[$rowCounter][4] = 'Skip';
+                    $rowCounter++;
+                    continue;
+                }
+
+                list ($type, $schema, $tca) = $this->guessLocalTypesFromRemoteField($originalName, $fieldConfiguration, $module->getModuleName());
+                $infoTableData[$rowCounter][2] = $type;
+                $infoTableData[$rowCounter][3] = $schema;
+
+                $properties[$propertyName] = [
+                    'column' => $fieldName,
+                    'type' => $type,
+                    'schema' => $schema,
+                    'config' => $tca
+                ];
+            } catch (UndefinedModuleException $error) {
+                $this->output?->writeln(' !!!SKIPPED!!! ' . $error->getMessage());
+            } catch (RuntimeException $error) {
+                $this->output?->writeln(' !!!SKIPPED!!! ' . $error->getMessage());
+                if (Environment::getContext()->isDevelopment()) {
+                    throw $error;
+                }
+            }
+            $rowCounter++;
+        }
+
+        if ($this->output instanceof SymfonyStyle && $this->output?->isVerbose() ?? false) {
+            $this->output->table(
+                [
+                    'Property',
+                    'Pim type',
+                    'Object type',
+                    'SQL type',
+                    'status'
+                ],
+                $infoTableData
+            );
+
+            $this->output->table(
+                [
+                    'Property',
+                    'Type',
+                    'Name',
+                    'Field',
+                    'Relation',
+                    'Source table',
+                    'Source field',
+                    'Target table',
+                    'Target field',
+                    'Relation table',
+                ],
+                $this->relationData
+            );
+        }
+
+        return $properties;
+    }
+
+    /**
+     * @param string $originalName
+     * @param array $fieldConfiguration
+     * @param string $currentSideModuleName Module name for the side of the relation we are currently processing
+     * @return array
+     * @throws Exception
+     */
+    protected function guessLocalTypesFromRemoteField(string $originalName, array $fieldConfiguration, string $currentSideModuleName): array
+    {
+        $textFieldTypes = ['CEText', 'MAMString', 'XMPString'];
+        if (array_key_exists('fulltext', $fieldConfiguration) && in_array($fieldConfiguration['type'], $textFieldTypes)) {
+            // Shortcut: any fulltext/text typed fields will be "string" in class property and "text" in SQL
+            return [
+                'string',
+                'text',
+                [
+                    'type' => 'text'
+                ]
+            ];
+        }
+
+        //$fieldName = $this->resolveFieldName($fieldConfiguration);
+        $fieldName = $originalName;
+
+        $dataType = $sqlType = null;
+        $tca = [
+            'type' => 'passthrough'
+        ];
+
+        switch ($fieldConfiguration['type']) {
+            case 'CEVarchar':
+                $dataType = 'string';
+                $sqlType = 'text';
+                $tca = [
+                    'type' => 'input',
+                    'size' => $fieldConfiguration['length']
+                ];
+                break;
+            case 'MAMDate':
+            case 'CEDate':
+                $dataType = '\\DateTime';
+                $sqlType = 'int(11) DEFAULT 0 NOT NULL';
+                $tca = [
+                    'type' => 'datetime',
+                ];
+                break;
+            case 'MAMBoolean';
+            case 'CEBoolean':
+                $dataType = 'bool';
+                $sqlType = 'int(1) DEFAULT 0 NOT NULL';
+                $tca = [
+                    'type' => 'check'
+                ];
+                break;
+            case 'CEDouble':
+                $dataType = 'float';
+                $sqlType = 'double(10,6) DEFAULT 0.0 NOT NULL';
+                $tca = [
+                    'type' => 'number',
+                    'format' => 'decimal'
+                ];
+                break;
+            case 'CELong':
+                $dataType = 'int';
+                $sqlType = 'bigint(20) DEFAULT 0 NOT NULL';
+                $tca = [
+                    'type' => 'number',
+                ];
+                break;
+            case 'CETimestamp':
+            case 'CEInteger':
+            case 'MAMNumber':
+            case 'XMPNumber':
+                $dataType = 'int';
+                $sqlType = 'int(11) DEFAULT 0 NOT NULL';
+                $tca = [
+                    'type' => 'number',
+                ];
+                break;
+            case 'MAMList':
+            case 'CEVarcharList':
+                $dataType = 'array';
+                $sqlType = 'text';
+                break;
+            case 'FIELD_LINK':
+            case 'CEExternalIdList':
+            case 'CEIdList':
+            case 'MANY_TO_MANY':
+            case 'ONE_TO_MANY':
+            case 'MANY_TO_ONE':
+                //case 'ONE_TO_ONE':
+            case 'CEExternalId':
+                $modules = $this->getAllConfiguredModules();
+                if (!empty($fieldConfiguration['modules'])) {
+                    $relatedModule = reset($fieldConfiguration['modules']);
+                } elseif (!empty($fieldConfiguration['relatedModule'])) {
+                    $relatedModule = $fieldConfiguration['relatedModule'];
+                } elseif (($fieldConfiguration['parent'] ?? false) === $currentSideModuleName) {
+                    $relatedModule = $fieldConfiguration['child'];
+                } else {
+                    $relatedModule = $fieldConfiguration['parent'];
+                }
+                if (!isset($modules[$relatedModule])) {
+                    throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined', 8646815387);
+                }
+                $this->registerModule($modules[$relatedModule]);
+
+                $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
+                $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
+                $entityClassName = $modules[$relatedModule]->getMapper()->getEntityClassName();
+                $tca = $this->determineTableConfigurationForRelation($fieldName, $fieldConfiguration, $currentSideModuleName, $tableNameParent);
+                $dataType = '\\' . ObjectStorage::class . '<\\' . $entityClassName . '>';
+                $sqlType = 'int(11) DEFAULT 0 NOT NULL';
+                break;
+            case 'CEId':
+                //case 'CEExternalId':
+            case 'ONE_TO_ONE':
+                $modules = $this->getAllConfiguredModules();
+                if (!empty($fieldConfiguration['modules'])) {
+                    $relatedModule = reset($fieldConfiguration['modules']);
+                } elseif (!empty($fieldConfiguration['relatedModule'])) {
+                    $relatedModule = $fieldConfiguration['relatedModule'];
+                } elseif (($fieldConfiguration['parent'] ?? false) === $currentSideModuleName) {
+                    $relatedModule = $fieldConfiguration['child'];
+                } else {
+                    $relatedModule = $fieldConfiguration['parent'];
+                }
+                if (!isset($modules[$relatedModule])) {
+                    throw new UndefinedModuleException('Property "' . $fieldName . '" points to module "' . $relatedModule . '" which is not defined', 2321076760);
+                }
+                $this->registerModule($modules[$relatedModule]);
+                $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
+                $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
+                $entityClassName = $entityClassName ?? $modules[$relatedModule]->getMapper()->getEntityClassName();
+                $tca = $this->determineTableConfigurationForRelation($fieldName, $fieldConfiguration, $currentSideModuleName, $tableNameParent);
+                if ($relatedModule === 'file') {
+                    $dataType = '\\' . ObjectStorage::class . '<\\' . $entityClassName . '>';
+                }
+                $dataType = $dataType ?? ('\\' . $entityClassName);
+                $sqlType = 'int(11) DEFAULT 0 NOT NULL';
+                break;
+            default:
+                break;
+        }
+
+        if (!$dataType && !$sqlType) {
+            // The field was not of a standard type and is most likely a "ComplexType".
+
+            $modules = $this->getAllConfiguredModules();
+            $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
+            $entityShortNameParent = GeneralUtility::camelCaseToLowerCaseUnderscored(substr($entityNameParent, strrpos($entityNameParent, '\\') + 1));
+            $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
+            $dataType = '\\' . ComplexType::class;
+            $sqlType = 'int(11) DEFAULT 0 NOT NULL';
+            $tca = [
+                'type' => 'select',
+                'renderType' => 'selectSingle',
+                'foreign_table' => 'tx_fourallportal_domain_model_complextype',
+                'size' => 1,
+                //'foreign_field' => 'parent_uid',
+                //'foreign_match_fields' => [
+                //    'table_name' => $tableNameParent,
+                //    'field_name' => $fieldName,
+                //],
+                //'foreign_table_field' => 'table_name',
+                //'foreign_table_field' => $entityShortNameParent,
+                'maxitems' => 1
+            ];
+        }
+
+        return [
+            $dataType,
+            $sqlType,
+            $tca
+        ];
+    }
+
+    /**
+     * Attempts to determine a valid TCA configuration expressing
+     * a relationship (which is required for TYPO3 to handle the
+     * relation correctly).
+     *
+     * A valid relation is determined by the presence of a connector
+     * in the TYPO3 system which handles the module associated with
+     * the relation. If such a connector exists, it contains the
+     * information necessary to determine which object the relation
+     * points to and which relationship type it uses - and thus it
+     * becomes possible to create the TCA that is required.
+     *
+     * If a relation is considered invalid due to a missing connector
+     * an Exception is thrown (and the error is either reported or
+     * ignored and the property skipped, depending on TYPO3 context).
+     *
+     * @param string $originalName
+     * @param array $fieldConfiguration
+     * @param string $currentSideModuleName Module name for the side of the relation we are currently processing
+     * @param string $currentTableName
+     * @return array
+     * @throws Exception
+     */
+    protected function determineTableConfigurationForRelation(
+        string $originalName,
+        array  $fieldConfiguration,
+        string $currentSideModuleName,
+        string $currentTableName
+    ): array {
+        $overriddenType = null;
+        $modules = $this->getAllConfiguredModules();
+
+        //$fieldName = $this->resolveFieldName($fieldConfiguration);
+        $fieldName = $originalName;
+
+        if (!empty($fieldConfiguration['modules'])) {
+            $relatedModule = reset($fieldConfiguration['modules']);
+        } elseif (!empty($fieldConfiguration['relatedModule'])) {
+            $relatedModule = $fieldConfiguration['relatedModule'];
+        } elseif (($fieldConfiguration['parent'] ?? false) === $currentSideModuleName) {
+            $relatedModule = $fieldConfiguration['child'];
+        } else {
+            $relatedModule = $fieldConfiguration['parent'];
+        }
+
+        //if ($fieldConfiguration['relatedModule'] ?? false) {
+        if ($fieldConfiguration['type'] === 'CEExternalId') {
+            $overriddenType = 'ONE_TO_ONE';
+        } elseif ($fieldConfiguration['type'] === 'CEExternalIdList') {
+            $overriddenType = 'MANY_TO_MANY';
+        }
+        //}
+
+        try {
+            $tableNameParent = $entityNameParent = $entityShortNameParent = null;
+            if ($fieldConfiguration['parent'] ?? false) {
+                $this->validatePresenceOfConfiguredConnectorForModule($fieldConfiguration['parent']);
+                $entityNameParent = $modules[$fieldConfiguration['parent']]->getMapper()->getEntityClassName();
+                $entityShortNameParent = substr($entityNameParent, strrpos($entityNameParent, '\\') + 1);
+                $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
+            }
+        } catch (RuntimeException $error) {
+            throw new UndefinedModuleException(
+                sprintf(
+                    'Field "%s" uses module "%s" as parent in a relation, but the parent module is unknown to TYPO3. ' .
+                    'Please either configure a connector that uses the module, create a manual mapping for the field ' .
+                    'or configure the field as ignored by the mapper.',
+                    $fieldName,
+                    $fieldConfiguration['parent']
+                ), 4816263978
+            );
+        }
+
+        try {
+            $this->validatePresenceOfConfiguredConnectorForModule($relatedModule);
+            $entityNameChild = $modules[$relatedModule]->getMapper()->getEntityClassName();
+            $tableNameChild = $this->dataMapper->getDataMap($entityNameChild)->getTableName();
+        } catch (RuntimeException $error) {
+            throw new UndefinedModuleException(
+                sprintf(
+                    'Field "%s" uses module "%s" as child in a relation, but the child module is unknown to TYPO3. ' .
+                    'Please either configure a connector that uses the module, create a manual mapping for the field ' .
+                    'or configure the field as ignored by the mapper.',
+                    $fieldName,
+                    $fieldConfiguration['child']
+                ), 9274744073
+            );
+        }
+
+        $foreignTableName = $tableNameChild ?? $tableNameParent;
+        if (($foreignTableName ?? null) === 'sys_file_reference') {
+            /*
+             * TODO: Support options minitems and maxitems
+             *
+             * See: https://docs.typo3.org/m/typo3/reference-tca/12.4/en-us/ColumnsConfig/Type/File/Index.html
+             */
+            return [
+                'type' => 'file',
+            ];
+        }
+        $tca = [
+            'type' => 'select',
+            'renderType' => 'selectSingle',
+            'foreign_table' => $foreignTableName
+        ];
+
+        $fieldType = $overriddenType ?? $fieldConfiguration['type'];
+        $isLocalColumn = $currentSideModuleName === $fieldConfiguration['parent'];
+        $itSelfReferencing = $currentTableName === $foreignTableName;
+
+        switch ($fieldType) {
+            // M:N is expressed to TYPO3 as any other relation, but having an "MM" entry in the TCA containing a table name.
+            // This table can then be generated on-the-fly since all MM tables have the same default structure when written
+            // by this model generator class.
+            case 'CEExternalIdList':
+            case 'FIELD_LINK':
+            case 'CEIdList':
+            case 'MANY_TO_MANY':
+                unset($tca['renderType']);
+                $tca['type'] = 'group';
+                $tca['MM_hasUidField'] = true;
+                $tca['multiple'] = true;
+                $tca['allowed'] = $foreignTableName;
+                $relationTarget = $isLocalColumn ? 'child' : 'parent';
+                $relatedModuleConfiguration = $this->getModuleConfiguration($fieldConfiguration[$relationTarget]);
+                $relationConfiguraton = $relatedModuleConfiguration['relation_conf'][$fieldConfiguration['name']] ?? [];
+                $relatedModuleFields = $this->getModuleFieldConfiguration($fieldConfiguration[$relationTarget]);
+
+                /*
+                 * Self referencing table required MM_opposite_field
+                 */
+                if ($itSelfReferencing) {
+                    [$prefix,] = explode('_domain_model_', $currentTableName, 2);
+                    $isMain = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName) === GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
+                    /*
+                     * Important
+                     * Detect the correct foreign column name is fragile. If could be either stored within the field or the name
+                     *
+                     * Self referencein table are a bit more complicated, since a check is needed to make sure
+                     * that local and foreign columns are not equal
+                     */
+                    if ($isMain) {
+                        $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+                        $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
+                        if (!array_key_exists($columnNameForeign, $relatedModuleFields) || $columnNameForeign === $columnNameLocal) {
+                            $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
+                        }
+                        if (!array_key_exists($columnNameForeign, $relatedModuleFields)) {
+                            throw new Exception(
+                                vsprintf(
+                                    'Could not determine child column %2$s nor %3$s for relation on column %1$s',
+                                    [
+                                        $fieldName,
+                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
+                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
+                                    ]
+                                )
+                            );
+                        }
+                    } else {
+                        $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+                        $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
+                        if (!array_key_exists($columnNameLocal, $relatedModuleFields) || $columnNameLocal === $columnNameForeign) {
+                            $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
+                        }
+                        if (!array_key_exists($columnNameLocal, $relatedModuleFields)) {
+                            throw new Exception(
+                                vsprintf(
+                                    'Could not determine parent column %2$s nor %3$s for relation on column %1$s',
+                                    [
+                                        $fieldName,
+                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
+                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
+                                    ]
+                                )
+                            );
+                        }
+
+                        if (!in_array($columnNameLocal, self::RELATION_DISSALLOWED_OPPOSITE_FIELD)) {
+                            $tca['MM_opposite_field'] = $columnNameLocal;
+                        }
+                    }
+                } elseif ($isLocalColumn) {
+                    [$prefix,] = explode('_domain_model_', $currentTableName, 2);
+                    $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+                    /*
+                     * The value of name contains the field name of the foreign column
+                     * which is a combination of the value of 'child' and the prefix 'parent'
+                     */
+                    $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
+                    if (!array_key_exists($columnNameForeign, $relatedModuleFields)) {
+                        $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
+                    }
+                    if (!array_key_exists($columnNameForeign, $relatedModuleFields)) {
+                        throw new Exception(
+                            vsprintf(
+                                'Could not determine child column %2$s nor %3$s for relation on column %1$s',
+                                [
+                                    $fieldName,
+                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
+                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
+                                ]
+                            )
+                        );
+                    }
+                } else {
+                    [$prefix,] = explode('_domain_model_', $foreignTableName, 2);
+                    /*
+                     * Set "MM_opposite_field" to indicate this M:N is mirrored by other TCA. To do so, we must determine if
+                     * we are currently on the child side of the relation, in which case our field name comes from the child
+                     * entity name, and comes from parent if the opposite is true.
+                     *
+                     * Important:
+                     * The option 'MM_opposite_field' will prevent the generation of the relation table by TYPO3.
+                     * Therefor the relation configuration must be done within the main record (parent) and the child record
+                     */
+                    // field or name
+                    $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
+                    if (!array_key_exists($columnNameLocal, $relatedModuleFields)) {
+                        $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
+                    }
+                    if (!array_key_exists($columnNameLocal, $relatedModuleFields)) {
+                        throw new Exception(
+                            vsprintf(
+                                'Could not determine parent column %2$s nor %3$s for relation on column %1$s',
+                                [
+                                    $fieldName,
+                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
+                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
+                                ]
+                            )
+                        );
+                    }
+                    $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
+                    $tca['MM_opposite_field'] = $columnNameLocal;
+                }
+
+                $tca['MM'] = $this->buildRelationTableName(
+                    $prefix,
+                    $columnNameLocal,
+                    $columnNameForeign
+                );
+                $this->relationData[] = [
+                    $fieldName,
+                    $fieldType,
+                    $fieldConfiguration['name'],
+                    $fieldConfiguration['field'],
+                    'm:n',
+                    $isLocalColumn ? $currentTableName : $foreignTableName,
+                    $columnNameLocal,
+                    $isLocalColumn ? $foreignTableName : $currentTableName,
+                    $columnNameForeign,
+                    $tca['MM']
+                ];
+
+                /*
+                 * Table names are not allowed to exceed 64 characters
+                 * Since the database analyse may add the prefix `zzz_deleted_` this needs to be consider.
+                 * Therefor the maximum size for table names is 52 characters
+                 *
+                 * See: https://dev.mysql.com/doc/refman/8.4/en/identifier-length.html
+                 */
+                if (strlen($tca['MM']) > static::RELATION_TABLE_MAX_LENGTH) {
+                    throw new \Exception('Table name "' . $tca['MM'] . '" exceeded allowed ' . static::RELATION_TABLE_MAX_LENGTH . ' characters');
+                }
+                break;
+
+            // 1:N is expressed by setting a "foreign_field" to be used when matching records. In a 1:1 relation the "uid"
+            // column will always be used, but for 1:N we need to choose a different field. Which field this is, is
+            // determined by the entity name on the local side of the relation, e.g. if the parent is a class whose short
+            // name is "Product", the chosen column name will be "product"; if "ProductCategory" the chosen field name
+            // is "product_category" and so on. We include both 1:N and N:1 since to TYPO3 these are technically the same
+            // type, but expressing the "symmetric field" on the opposite side of the relation. We determine the target
+            // entity names by analyzing which Modules have Connectors that use Mappers which handle the entities.
+            case 'MANY_TO_ONE':
+            case 'ONE_TO_MANY':
+                $tca['foreign_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($entityShortNameParent) ?: $currentSideModuleName;
+                $this->relationData[] = [
+                    $fieldName,
+                    $fieldType,
+                    $fieldConfiguration['name'],
+                    $fieldConfiguration['field'],
+                    '1:n',
+                    $isLocalColumn ? $currentTableName : $foreignTableName,
+                    $fieldName,
+                    $isLocalColumn ? $foreignTableName : $currentTableName,
+                    $tca['foreign_field'],
+                    'N/A'
+                ];
+                //$tca['symmetric_field'] = GeneralUtility::camelCaseToLowerCaseUnderscored($entityShortNameChild);
+                break;
+
+            // Fallback case; ONE_TO_ONE is the default type of relation
+            case 'ONE_TO_ONE':
+            default:
+                $this->relationData[] = [
+                    $fieldName,
+                    $fieldType,
+                    $fieldConfiguration['name'],
+                    $fieldConfiguration['field'],
+                    '1:1',
+                    $isLocalColumn ? $currentTableName : $foreignTableName,
+                    $fieldName,
+                    $isLocalColumn ? $foreignTableName : $currentTableName,
+                    'N/A',
+                    'N/A'
+                ];
+                break;
+        }
+
+        if (!($tca['foreign_table'] ?? false) && ($tca['type'] ?? false) !== 'group') {
+            throw new UndefinedModuleException(
+                sprintf(
+                    'Field "%s" defines a CEExternalId or CEExternalIdList which does not configure a related module. ' .
+                    'Normally this would mean that this field should be mapped to a plain string value, but due to the ' .
+                    'ambiguity in target resource type, we require that you manually map or ignore this particular field.',
+                    $fieldConfiguration['field']
+                ), 5649592310
+            );
+        }
+
+        return $tca;
+    }
 
     /**
      * Calculate the name of the relation table.
@@ -984,144 +1200,144 @@ TEMPLATE;
      * @param string $foreignFieldName
      * @return string
      */
-  protected function buildRelationTableName(
-      string $extension,
-      string $localFieldName,
-      string $foreignFieldName
-  ): string {
-      $extension = ltrim($extension, 'tx_');
-      $extension = strtolower($extension);
-      $relationTableName = implode(
-          '_',
-          [
-              'tx',
-              $extension,
-              $localFieldName,
-              $foreignFieldName,
-              'mm'
-          ]
-      );
+    protected function buildRelationTableName(
+        string $extension,
+        string $localFieldName,
+        string $foreignFieldName
+    ): string {
+        $extension = ltrim($extension, 'tx_');
+        $extension = strtolower($extension);
+        $relationTableName = implode(
+            '_',
+            [
+                'tx',
+                $extension,
+                $localFieldName,
+                $foreignFieldName,
+                'mm'
+            ]
+        );
 
-      /*
-       * Keep the relation name as is
-       */
-      if (strlen($relationTableName) <= static::RELATION_TABLE_MAX_LENGTH) {
-          return $relationTableName;
-      }
+        /*
+         * Keep the relation name as is
+         */
+        if (strlen($relationTableName) <= static::RELATION_TABLE_MAX_LENGTH) {
+            return $relationTableName;
+        }
 
-      /*
-       * Create a hash with maximum of 8 characters
-       */
-      $relationTableNameHash = hash('crc32', $relationTableName);
-      $relationTableNameWithHash = implode(
-          '_',
-          [
-              'tx',
-              $extension,
-              $localFieldName,
-              $foreignFieldName
-          ]
-      );
-      /*
-       * Shrink name to the maximum allowed size
-       * Remove enough characters from the end and add the calculated hash
-       * This should keep the table name some how readable
-       */
-      $relationTableNameWithHash = substr(
-          $relationTableNameWithHash,
-          0,
-          static::RELATION_TABLE_MAX_LENGTH - 3 // Remove '_mm' from the table name
-      );
-      $relationTableNameWithHash = substr(
-          $relationTableNameWithHash,
-          0,
-          strlen($relationTableNameWithHash) - strlen($relationTableNameHash)
-      );
-      $relationTableNameWithHash .= $relationTableNameHash . '_mm';
-      /*
-       * Return the name in following format
-       * tx_<extension name>_<local and child column name truncated>_<hash>_mm
-       */
-      if (strlen($relationTableNameWithHash) <= static::RELATION_TABLE_MAX_LENGTH) {
-          return $relationTableNameWithHash;
-      }
+        /*
+         * Create a hash with maximum of 8 characters
+         */
+        $relationTableNameHash = hash('crc32', $relationTableName);
+        $relationTableNameWithHash = implode(
+            '_',
+            [
+                'tx',
+                $extension,
+                $localFieldName,
+                $foreignFieldName
+            ]
+        );
+        /*
+         * Shrink name to the maximum allowed size
+         * Remove enough characters from the end and add the calculated hash
+         * This should keep the table name some how readable
+         */
+        $relationTableNameWithHash = substr(
+            $relationTableNameWithHash,
+            0,
+            static::RELATION_TABLE_MAX_LENGTH - 3 // Remove '_mm' from the table name
+        );
+        $relationTableNameWithHash = substr(
+            $relationTableNameWithHash,
+            0,
+            strlen($relationTableNameWithHash) - strlen($relationTableNameHash)
+        );
+        $relationTableNameWithHash .= $relationTableNameHash . '_mm';
+        /*
+         * Return the name in following format
+         * tx_<extension name>_<local and child column name truncated>_<hash>_mm
+         */
+        if (strlen($relationTableNameWithHash) <= static::RELATION_TABLE_MAX_LENGTH) {
+            return $relationTableNameWithHash;
+        }
 
-      /*
-       * Calculated name is to long
-       * Only use the prefix and the hash value
-       */
-      $relationTableNameWithHash = implode(
-          '_',
-          [
-              'tx',
-              $extension,
-              $relationTableNameHash,
-              'mm'
-          ]
-      );
+        /*
+         * Calculated name is to long
+         * Only use the prefix and the hash value
+         */
+        $relationTableNameWithHash = implode(
+            '_',
+            [
+                'tx',
+                $extension,
+                $relationTableNameHash,
+                'mm'
+            ]
+        );
 
-      /*
-       * Return the name in following format
-       * tx_<extension name>_<hash>_mm
-       */
-      if (strlen($relationTableNameWithHash) <= static::RELATION_TABLE_MAX_LENGTH) {
-          return $relationTableNameWithHash;
-      }
+        /*
+         * Return the name in following format
+         * tx_<extension name>_<hash>_mm
+         */
+        if (strlen($relationTableNameWithHash) <= static::RELATION_TABLE_MAX_LENGTH) {
+            return $relationTableNameWithHash;
+        }
 
-      /*
-       * Fallback in case the extension key (prefix) is to long
-       *
-       * Return the name in following format
-       * tx_<hash>_mm
-       */
-      return implode(
-          '_',
-          [
-              'tx',
-              $relationTableNameHash,
-              'mm'
-          ]
-      );
-  }
+        /*
+         * Fallback in case the extension key (prefix) is to long
+         *
+         * Return the name in following format
+         * tx_<hash>_mm
+         */
+        return implode(
+            '_',
+            [
+                'tx',
+                $relationTableNameHash,
+                'mm'
+            ]
+        );
+    }
 
     /**
      * @param string $moduleName
      * @throws UndefinedModuleException
      */
-    protected function validatePresenceOfConfiguredConnectorForModule($moduleName)
+    protected function validatePresenceOfConfiguredConnectorForModule(string $moduleName)
     {
         if (empty($this->getAllConfiguredModules()[$moduleName])) {
             throw new UndefinedModuleException(sprintf('Module "%s" is unknown to TYPO3, make sure it is configured!', $moduleName), 8654469181);
         }
     }
 
-  /**
-   * Generates the actual class file using templates.
-   *
-   * Actually generates two different classes which use
-   * the same name, but have different priorities:
-   *
-   * 1. A completely safe fallback that has none of the
-   *    properties read from the remote API.
-   * 2. The actual class with all properties as read from
-   *    the remote API.
-   *
-   * The two-step generation ensures that even if the second
-   * step with dynamic properties fail (perhaps due to logic
-   * errors or connectivity issues) a safe fallback is
-   * guaranteed to exist and be loadable. The second step
-   * simply overwrites the generated fallback if no
-   *
-   * @param string $className
-   * @param string $parentClass
-   * @param array $propertyConfiguration
-   * @param string|null $identifier
-   * @return string
-   */
+    /**
+     * Generates the actual class file using templates.
+     *
+     * Actually generates two different classes which use
+     * the same name, but have different priorities:
+     *
+     * 1. A completely safe fallback that has none of the
+     *    properties read from the remote API.
+     * 2. The actual class with all properties as read from
+     *    the remote API.
+     *
+     * The two-step generation ensures that even if the second
+     * step with dynamic properties fail (perhaps due to logic
+     * errors or connectivity issues) a safe fallback is
+     * guaranteed to exist and be loadable. The second step
+     * simply overwrites the generated fallback if no
+     *
+     * @param string $className
+     * @param string $parentClass
+     * @param array $propertyConfiguration
+     * @param string|null $identifier
+     * @return string
+     */
     protected function generateCachedClassFile(
-        string $className,
-        string $parentClass,
-        array $propertyConfiguration,
+        string      $className,
+        string      $parentClass,
+        array       $propertyConfiguration,
         string|null $identifier = null
     ): string {
         $this->resetClassDefinition();
@@ -1303,24 +1519,24 @@ TEMPLATE;
      *
      * @return string
      */
-  protected function getUseStatements(): string
-  {
-      $useStatements = [];
-      foreach ($this->usedClasses as $alias => $class) {
-          if (str_ends_with($class, '\\' . $alias)) {
-              $useStatements[] = 'use ' . $class . ';';
-          } else {
-              $useStatements[] = 'use ' . $class . ' as ' . $alias . ';';
-          }
-      }
-      sort($useStatements);
+    protected function getUseStatements(): string
+    {
+        $useStatements = [];
+        foreach ($this->usedClasses as $alias => $class) {
+            if (str_ends_with($class, '\\' . $alias)) {
+                $useStatements[] = 'use ' . $class . ';';
+            } else {
+                $useStatements[] = 'use ' . $class . ' as ' . $alias . ';';
+            }
+        }
+        sort($useStatements);
 
-      if (empty($useStatements)) {
-          return '';
-      }
+        if (empty($useStatements)) {
+            return '';
+        }
 
-      return PHP_EOL . PHP_EOL . implode(PHP_EOL, $useStatements) . PHP_EOL;
-  }
+        return PHP_EOL . PHP_EOL . implode(PHP_EOL, $useStatements) . PHP_EOL;
+    }
 
     /**
      * Create property definitions
@@ -1328,298 +1544,348 @@ TEMPLATE;
      *
      * @return string
      */
-  protected function getPropertiesString(): string
-  {
-      $properties = [];
-      $propertyNames = array_keys($this->properties);
-      sort($propertyNames);
-      foreach ($propertyNames as $propertyName) {
-        $type = ($this->properties[$propertyName]['type'] ?? 'string');
-        $strictTypes = ($this->properties[$propertyName]['strictTypes'] ?? 'string');
-        $strictTypes = $this->standadizeUnionTypes($strictTypes);
-        $typedProperty = $this->strictTypes ? $strictTypes . ' ' : '';
-        $propertyDefinition = [
-            '    /**'
-        ];
+    protected function getPropertiesString(): string
+    {
+        $properties = [];
+        $propertyNames = array_keys($this->properties);
+        sort($propertyNames);
+        foreach ($propertyNames as $propertyName) {
+            $type = ($this->properties[$propertyName]['type'] ?? 'string');
+            $strictTypes = ($this->properties[$propertyName]['strictTypes'] ?? 'string');
+            $strictTypes = $this->standadizeUnionTypes($strictTypes);
+            $typedProperty = $this->strictTypes ? $strictTypes . ' ' : '';
+            $propertyDefinition = [
+                '    /**'
+            ];
 
-        $description = (string)($this->properties[$propertyName]['description'] ?? '');
-          if (!empty($description)) {
-              $propertyDefinition[] = '     * ' . $description;
-              $propertyDefinition[] = '     *';
-          }
-
-          $propertyDefinition[] = '     * @var ' . $type . ' $' . $propertyName;
-          $propertyDefinition[] = '     */';
-
-        if ((bool)($this->properties[$propertyName]['lazy'] ?? false)) {
-            $propertyDefinition[] = '    #[Extbase\ORM\Lazy()]';
-        }
-        $hasDefaultValue = ($this->properties[$propertyName]['hasDefaultValue'] ?? false);
-        $value = ($this->properties[$propertyName]['value'] ?? null);
-        if ($hasDefaultValue) {
-            if ($value === null || $value === 'null') {
-                $value = 'null';
-            } elseif (is_bool($value)) {
-                $value = $value ? 'true' : 'false';
-            } elseif (!is_numeric($value)) {
-                $value = trim($value, '\'');
-                $value = '\'' . $value . '\'';
+            $description = (string)($this->properties[$propertyName]['description'] ?? '');
+            if (!empty($description)) {
+                $propertyDefinition[] = '     * ' . $description;
+                $propertyDefinition[] = '     *';
             }
-            $propertyDefinition[] = '    protected ' . $typedProperty . '$' . $propertyName . ' = ' . $value . ';';
-        } else {
-            $propertyDefinition[] = '    protected ' . $typedProperty . '$' . $propertyName . ';';
+
+            $propertyDefinition[] = '     * @var ' . $type . ' $' . $propertyName;
+            $propertyDefinition[] = '     */';
+
+            if ((bool)($this->properties[$propertyName]['lazy'] ?? false)) {
+                $propertyDefinition[] = '    #[Extbase\ORM\Lazy()]';
+            }
+            $hasDefaultValue = ($this->properties[$propertyName]['hasDefaultValue'] ?? false);
+            $value = ($this->properties[$propertyName]['value'] ?? null);
+            if ($hasDefaultValue) {
+                if ($value === null || $value === 'null') {
+                    $value = 'null';
+                } elseif (is_bool($value)) {
+                    $value = $value ? 'true' : 'false';
+                } elseif (!is_numeric($value)) {
+                    $value = trim($value, '\'');
+                    $value = '\'' . $value . '\'';
+                }
+                $propertyDefinition[] = '    protected ' . $typedProperty . '$' . $propertyName . ' = ' . $value . ';';
+            } else {
+                $propertyDefinition[] = '    protected ' . $typedProperty . '$' . $propertyName . ';';
+            }
+            $properties[] = implode(PHP_EOL, $propertyDefinition);
         }
-        $properties[] = implode(PHP_EOL, $propertyDefinition);
-      }
 
-      if (empty($properties)) {
-          return '';
-      }
+        if (empty($properties)) {
+            return '';
+        }
 
-      return PHP_EOL . implode(PHP_EOL . PHP_EOL , $properties) . PHP_EOL;
-  }
+        return PHP_EOL . implode(PHP_EOL . PHP_EOL, $properties) . PHP_EOL;
+    }
 
     /**
      * Sort the properties and generate the initialization of the object storages
      *
      * @return string
      */
-  protected function getInitializeStorageString(): string
-  {
-      $initializedStorages = [];
-      sort($this->objectStorageProperties);
-      $properties = array_unique($this->objectStorageProperties);
+    protected function getInitializeStorageString(): string
+    {
+        $initializedStorages = [];
+        sort($this->objectStorageProperties);
+        $properties = array_unique($this->objectStorageProperties);
 
-      foreach ($properties as $propertyName) {
-          $initializedStorages[] = '        $this->' . $propertyName . ' = new ObjectStorage();';
-      }
-      return implode(PHP_EOL, $initializedStorages);
-  }
-
-  /**
-   * @return PhpFrontend
-   * @throws NoSuchCacheException
-   */
-  protected static function getGeneratedClassCache(): AbstractFrontend
-  {
-    return GeneralUtility::makeInstance(CacheManager::class)->getCache('fourallportal_classes');
-  }
-
-  /**
-   * @param string $entityClassName
-   * @return Module|null
-   * @throws ApiException
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  public function getModuleByHandledEntityClassName($entityClassName)
-  {
-    foreach ($this->getAllConfiguredModules() as $module) {
-      if ($module->getMapper()->getEntityClassName() === $entityClassName) {
-        return $module;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * @return Module[]
-   * @throws ApiException
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  public function getAllConfiguredModules()
-  {
-    static $configuredModules = [];
-    if (!empty($configuredModules)) {
-      return $configuredModules;
-    }
-    $requirePersist = false;
-
-    /** @var Server[] $servers */
-    $servers = $this->serverRepository->findBy(['active' => true]);
-    foreach ($servers as $server) {
-      /** @var Module[] $modules */
-      $modules = $server->getModules();
-      foreach ($modules as $module) {
-        if (empty($module->getModuleName())) {
-          $connectorConfiguration = $server->getClient()->getConnectorConfig($module->getConnectorName());
-          $module->setModuleName($connectorConfiguration['moduleConfig']['module_name']);
-          $module->update();
-          $requirePersist = true;
+        foreach ($properties as $propertyName) {
+            $initializedStorages[] = '        $this->' . $propertyName . ' = new ObjectStorage();';
         }
-        $configuredModules[$module->getModuleName()] = $module;
-      }
+        return implode(PHP_EOL, $initializedStorages);
     }
 
-    if ($requirePersist) {
-      $this->persistenceManager->persistAll();
+    /**
+     * @return PhpFrontend
+     * @throws NoSuchCacheException
+     */
+    protected static function getGeneratedClassCache(): AbstractFrontend
+    {
+        return GeneralUtility::makeInstance(CacheManager::class)->getCache('fourallportal_classes');
     }
 
-    return $configuredModules;
-  }
-
-  protected function isSkippedField(Module $module, string $fieldName, array $fieldConfiguration, array $validModuleNames = []): bool
-  {
-    $map = MappingRegister::resolvePropertyMapForMapper($module->getMappingClass());
-    if (isset($fieldConfiguration['child']) && !empty($validModuleNames) && !in_array($fieldConfiguration['child'], $validModuleNames)) {
-        $this->output?->writeln(' - skipped; is a reference to undefined module ' . var_export($fieldConfiguration['child'], true));
-      return true;
-    } elseif (($map[$fieldName] ?? null) === false) {
-      // This property is explicitly mapped in the mapping array, indicating it is manually
-      // added to the sub-class of the abstract class we are generating, thus needs to be skipped.
-        $this->output?->writeln(' - skipped; intentionally marked as ignored in property mapping config');
-      return true;
-    } elseif (($map[$fieldName] ?? false) !== false) {
-      // This property is explicitly mapped in the mapping array, indicating it is manually
-      // added to the sub-class of the abstract class we are generating, thus needs to be skipped.
-        $this->output?->writeln(' - skipped; has custom mapping to ' . var_export($map[$fieldName], true));
-      return true;
-    } elseif (MappingRegister::resolvePropertyValueSetter($module->getMappingClass(), $fieldName)) {
-      // Properties which are mapped using ValueSetter implementations must be skipped.
-        $this->output?->writeln(' - skipped; has custom value setter');
-      return true;
-    } elseif (preg_match('/[^a-z0-9_]/i', $fieldName) || preg_match('/[^a-z]/i', $fieldName[0]) && ($map[$fieldName] ?? false) !== false) {
-      // Property uses a name that is impossible to express as SQL type and it was NOT defined in
-      // the property map for the class. This must yield an exception.
-        $this->output?->writeln(' - skipped; field name is invalid');
-      throw new RuntimeException(
-        sprintf(
-          'Property "%s" should map to "%s" but the property name contains invalid characters and is ' .
-          'not configured in the manual property map. To map this property - which you must do even ' .
-          'if the property should just be ignored by mapping it to "false" as target column - please ' .
-          'add it to the property map for the model "%s"',
-          $fieldName,
-          GeneralUtility::underscoredToLowerCamelCase($fieldName),
-          $module->getMapper()->getEntityClassName()
-        ), 1978775391
-      );
+    /**
+     * @param string $entityClassName
+     * @return Module|null
+     * @throws ApiException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    public function getModuleByHandledEntityClassName($entityClassName)
+    {
+        foreach ($this->getAllConfiguredModules() as $module) {
+            if ($module->getMapper()->getEntityClassName() === $entityClassName) {
+                return $module;
+            }
+        }
+        return null;
     }
-    return false;
-  }
 
-  protected function resetClassDefinition(): self
-  {
-      $this->usedClasses = [];
-      $this->properties = [];
-      return $this;
-  }
+    /**
+     * @return Module[]
+     * @throws ApiException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    public function getAllConfiguredModules(): array
+    {
+        static $configuredModules = [];
+        if (!empty($configuredModules)) {
+            return $configuredModules;
+        }
+        $requirePersist = false;
 
-  protected function registerProperty(
-      string $name,
-      string $typeString,
-      mixed  $value = null,
-      string $description = null,
-      bool   $lazy = false,
-      bool   $hasDefaultValue = true,
-      int    $relationType = self::RELATION_TYPE_NONE,
-      bool $allowNull = false
-  ): self {
-      if ($lazy) {
-          $this->registerUseStatement('TYPO3\CMS\Extbase\Annotation', 'Extbase');
-          if ($relationType === self::RELATION_TYPE_SINGLE) {
-              if (!str_contains($typeString, 'LazyLoadingProxy')) {
-                  $typeString .= '|' . LazyLoadingProxy::class;
-              }
-          }
-      }
-      if ($allowNull || ($hasDefaultValue && ($value === null || $value === 'null'))) {
-          $typeString .= '|null';
-      }
+        /** @var Server[] $servers */
+        $servers = $this->serverRepository->findBy(['active' => true]);
+        foreach ($servers as $server) {
+            /** @var Module[] $modules */
+            $modules = $server->getModules();
+            foreach ($modules as $module) {
+                if (empty($module->getModuleName())) {
+                    $connectorConfiguration = $server->getClient()->getConnectorConfig($module->getConnectorName());
+                    $module->setModuleName($connectorConfiguration['moduleConfig']['module_name']);
+                    $module->update();
+                    $requirePersist = true;
+                }
+                $configuredModules[$module->getModuleName()] = $module;
+            }
+        }
 
-      $typeWithSubtypes = [];
-      $strictTypes = [];
-      $types = explode('|', $typeString);
-      foreach ($types as $type) {
-          if (str_contains($type, '<')) {
-              [$mainType, $subtype] = explode('<', $type, 2);
-              $subtype = rtrim($subtype, '>');
-              if (str_contains($subtype, '|')) {
-                  $subtypes = explode('|', $subtype);
-                  $aliases = [];
-                  foreach ($subtypes as $typeName) {
-                      if (class_exists($typeName)) {
-                          if (ltrim($typeName, '\\') === ObjectStorage::class) {
-                              $this->registerStorageInitialization($name);
-                          }
-                          $aliases[] = $this->registerUseStatement($typeName);
-                      } else {
-                          $aliases[] = $typeName;
-                      }
-                  }
-                  $subtype = implode('|', $aliases);
-              } elseif (class_exists($subtype)) {
-                  $subtype = $this->registerUseStatement($subtype);
-              }
-              if (ltrim($mainType, '\\') === ObjectStorage::class) {
-                  $this->registerStorageInitialization($name);
-              }
-              $alias = $this->registerUseStatement($mainType);
-              $typeWithSubtypes[] = $alias . '<' . $subtype . '>';
-              $strictTypes[] = $alias;
-          } elseif (class_exists($type)) {
-              if (ltrim($type, '\\') === ObjectStorage::class) {
-                  $this->registerStorageInitialization($name);
-              }
-              $alias = $this->registerUseStatement($type);
-              $typeWithSubtypes[] = $alias;
-              $strictTypes[] = $alias;
-          } else {
-              $typeWithSubtypes[] = $type;
-              $strictTypes[] = $type;
-          }
-      }
+        if ($requirePersist) {
+            $this->persistenceManager->persistAll();
+        }
 
-      /*
-       * Correct data type of the values
-       */
-      if (str_contains($typeString, 'bool')) {
-          $value = trim($value, '\'');
-          $value = (bool)$value;
-      } elseif ($value === null || $value === 'null') {
-          $value = null;
-      } elseif (str_contains($typeString, 'int')) {
-          $value = trim($value, '\'');
-          $value = (int)$value;
-      } elseif (str_contains($typeString, 'float')) {
-          $value = trim($value, '\'');
-          $value = (float)$value;
-      }
+        return $configuredModules;
+    }
 
-      $this->properties[$name] = [
-          'type' => implode('|', $typeWithSubtypes),
-          'strictTypes' => implode('|', $strictTypes),
-          'value' => $value,
-          'hasDefaultValue' => $hasDefaultValue,
-          'lazy' => $lazy,
-          'description' => $description,
-          'allowNull' => $allowNull
-      ];
-      return $this;
-  }
+    protected function isSkippedField(Module $module, string $fieldName, array $fieldConfiguration, array $validModuleNames = []): bool
+    {
+        $map = MappingRegister::resolvePropertyMapForMapper($module->getMappingClass());
+        if (isset($fieldConfiguration['child']) && !empty($validModuleNames) && !in_array($fieldConfiguration['child'], $validModuleNames)) {
+            $this->output?->writeln(' - skipped; is a reference to undefined module ' . var_export($fieldConfiguration['child'], true));
+            return true;
+        } elseif (($map[$fieldName] ?? null) === false) {
+            // This property is explicitly mapped in the mapping array, indicating it is manually
+            // added to the sub-class of the abstract class we are generating, thus needs to be skipped.
+            $this->output?->writeln(' - skipped; intentionally marked as ignored in property mapping config');
+            return true;
+        } elseif (($map[$fieldName] ?? false) !== false) {
+            // This property is explicitly mapped in the mapping array, indicating it is manually
+            // added to the sub-class of the abstract class we are generating, thus needs to be skipped.
+            $this->output?->writeln(' - skipped; has custom mapping to ' . var_export($map[$fieldName], true));
+            return true;
+        } elseif (MappingRegister::resolvePropertyValueSetter($module->getMappingClass(), $fieldName)) {
+            // Properties which are mapped using ValueSetter implementations must be skipped.
+            $this->output?->writeln(' - skipped; has custom value setter');
+            return true;
+        } elseif (preg_match('/[^a-z0-9_]/i', $fieldName) || preg_match('/[^a-z]/i', $fieldName[0]) && ($map[$fieldName] ?? false) !== false) {
+            // Property uses a name that is impossible to express as SQL type and it was NOT defined in
+            // the property map for the class. This must yield an exception.
+            $this->output?->writeln(' - skipped; field name is invalid');
+            throw new RuntimeException(
+                sprintf(
+                    'Property "%s" should map to "%s" but the property name contains invalid characters and is ' .
+                    'not configured in the manual property map. To map this property - which you must do even ' .
+                    'if the property should just be ignored by mapping it to "false" as target column - please ' .
+                    'add it to the property map for the model "%s"',
+                    $fieldName,
+                    GeneralUtility::underscoredToLowerCamelCase($fieldName),
+                    $module->getMapper()->getEntityClassName()
+                ), 1978775391
+            );
+        }
+        return false;
+    }
 
-  protected function registerStorageInitialization(string $propertyName): self
-  {
-      if (!in_array($propertyName, $this->objectStorageProperties)) {
-          $this->objectStorageProperties[] = $propertyName;
-      }
-      return $this;
-  }
+    protected function resetClassDefinition(): self
+    {
+        $this->usedClasses = [];
+        $this->properties = [];
+        $this->objectStorageProperties = [];
+        return $this;
+    }
 
-  protected function registerUseStatement(string $className, string|null $alias = null): string
-  {
-      $className = ltrim($className, '\\');
-      if (empty($alias)) {
-          $parts = explode('\\', $className);
-          $alias = array_pop($parts);
-      }
+    protected function registerProperty(
+        string $name,
+        string $typeString,
+        mixed $value = null,
+        string $description = null,
+        bool $lazy = false,
+        bool $hasDefaultValue = true,
+        int $relationType = self::RELATION_TYPE_NONE,
+        bool $allowNull = false
+    ): self {
+        if ($lazy) {
+            $this->registerUseStatement('TYPO3\CMS\Extbase\Annotation', 'Extbase');
+            if ($relationType === self::RELATION_TYPE_SINGLE) {
+                if (!str_contains($typeString, 'LazyLoadingProxy')) {
+                    $typeString .= '|' . LazyLoadingProxy::class;
+                }
+            }
+        }
+        if ($allowNull || ($hasDefaultValue && ($value === null || $value === 'null'))) {
+            $typeString .= '|null';
+        }
 
-      if (!isset($this->usedClasses[$alias])) {
-          $this->usedClasses[$alias] = $className;
-      } elseif ($this->usedClasses[$alias] !== $className) {
-          throw new \Exception('Duplicate alias');
-      }
+        $typeWithSubtypes = [];
+        $strictTypes = [];
+        $types = explode('|', $typeString);
+        foreach ($types as $type) {
+            if (str_contains($type, '<')) {
+                [$mainType, $subtype] = explode('<', $type, 2);
+                $subtype = rtrim($subtype, '>');
+                if (str_contains($subtype, '|')) {
+                    $subtypes = explode('|', $subtype);
+                    $aliases = [];
+                    foreach ($subtypes as $typeName) {
+                        if (class_exists($typeName)) {
+                            if (ltrim($typeName, '\\') === ObjectStorage::class) {
+                                $this->registerStorageInitialization($name);
+                            }
+                            $aliases[] = $this->registerUseStatement($typeName);
+                        } else {
+                            $aliases[] = $typeName;
+                        }
+                    }
+                    $subtype = implode('|', $aliases);
+                } elseif (class_exists($subtype)) {
+                    $subtype = $this->registerUseStatement($subtype);
+                }
+                if (ltrim($mainType, '\\') === ObjectStorage::class) {
+                    $this->registerStorageInitialization($name);
+                }
+                $alias = $this->registerUseStatement($mainType);
+                $typeWithSubtypes[] = $alias . '<' . $subtype . '>';
+                $strictTypes[] = $alias;
+            } elseif (class_exists($type)) {
+                if (ltrim($type, '\\') === ObjectStorage::class) {
+                    $this->registerStorageInitialization($name);
+                }
+                $alias = $this->registerUseStatement($type);
+                $typeWithSubtypes[] = $alias;
+                $strictTypes[] = $alias;
+            } else {
+                $typeWithSubtypes[] = $type;
+                $strictTypes[] = $type;
+            }
+        }
 
-      return $alias;
-  }
+        /*
+         * Correct data type of the values
+         */
+        if (str_contains($typeString, 'bool')) {
+            $value = trim($value, '\'');
+            $value = (bool)$value;
+        } elseif ($value === null || $value === 'null') {
+            $value = null;
+        } elseif (str_contains($typeString, 'int')) {
+            $value = trim($value, '\'');
+            $value = (int)$value;
+        } elseif (str_contains($typeString, 'float')) {
+            $value = trim($value, '\'');
+            $value = (float)$value;
+        }
+
+        $this->properties[$name] = [
+            'type' => implode('|', $typeWithSubtypes),
+            'strictTypes' => implode('|', $strictTypes),
+            'value' => $value,
+            'hasDefaultValue' => $hasDefaultValue,
+            'lazy' => $lazy,
+            'description' => $description,
+            'allowNull' => $allowNull
+        ];
+        return $this;
+    }
+
+    protected function registerStorageInitialization(string $propertyName): self
+    {
+        if (!in_array($propertyName, $this->objectStorageProperties)) {
+            $this->objectStorageProperties[] = $propertyName;
+        }
+        return $this;
+    }
+
+    protected function registerUseStatement(string $className, string|null $alias = null): string
+    {
+        $className = ltrim($className, '\\');
+        if (empty($alias)) {
+            $parts = explode('\\', $className);
+            $alias = array_pop($parts);
+        }
+
+        if (!isset($this->usedClasses[$alias])) {
+            $this->usedClasses[$alias] = $className;
+        } elseif ($this->usedClasses[$alias] !== $className) {
+            throw new \Exception('Duplicate alias');
+        }
+
+        return $alias;
+    }
+
+    /**
+     * Add a module to the internal cache
+     *
+     * @param Module $module
+     * @return void
+     */
+    protected function registerModule(Module $module): void
+    {
+        if (!isset($this->moduleCache[$module->getModuleName()])) {
+            $this->moduleCache[$module->getModuleName()] = $module;
+        }
+    }
+
+    /**
+     * @param string $moduleName
+     * @return array
+     */
+    protected function getModuleConfiguration(string $moduleName): array
+    {
+        $module = $this->moduleCache[$moduleName] ?? null;
+        if ($module === null) {
+            return [];
+        }
+        return $module->getModuleConfiguration();
+    }
+
+    protected function getModuleFieldConfiguration(string $moduleName): array
+    {
+        $module = $this->moduleCache[$moduleName] ?? null;
+        if (isset($this->moduleFieldConfigurationCache[$moduleName])) {
+            return $this->moduleFieldConfigurationCache[$moduleName];
+        }
+        if ($module === null) {
+            return [];
+        }
+        $moduleConfiguration = $module->getModuleConfiguration();
+        $connectorConfiguration = $module->getConnectorConfiguration();
+
+        $this->moduleFieldConfigurationCache[$moduleName] = array_replace_recursive(
+            array_intersect_assoc(
+                $moduleConfiguration['field_conf'],
+                $connectorConfiguration['fieldsToLoad']
+            ),
+            $moduleConfiguration['relation_conf']
+        );
+
+        return $this->moduleFieldConfigurationCache[$moduleName];
+    }
 }
