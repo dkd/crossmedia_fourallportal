@@ -115,7 +115,7 @@ class SyncCommand extends Command
             try {
                 $this->eventExecutionService->lock();
             } catch (\Exception $error) {
-                $io->writeln('Cannot acquire lock - exiting without error' . PHP_EOL);
+                $io->writeln('Cannot acquire lock - exiting error' . PHP_EOL);
                 return Command::FAILURE;
             }
         }
@@ -137,7 +137,6 @@ class SyncCommand extends Command
         if (!$force && $sync) {
             $this->eventExecutionService->unlock();
         }
-
         return Command::SUCCESS;
     }
 }
