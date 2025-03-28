@@ -41,7 +41,11 @@ all dynamic-model-enabled modules' entities.
 Important:
 Clear the TYPO3 cache before running an import
 DESCRIPTION)
-            ->addArgument('entityClassName', InputArgument::REQUIRED, 'Name of the entity class. Use two back slashes on the command line')
+            ->addArgument(
+                'entityClassName',
+                InputArgument::OPTIONAL,
+                'Name of the entity class. Use two back slashes on the command line'
+            )
             ->addOption(
                 'strict',
                 null,
@@ -63,8 +67,11 @@ DESCRIPTION)
     {
         $io = new SymfonyStyle($input, $output);
         $io->title($this->getDescription());
+        $entityClassName = null;
+        if ($input->hasArgument('entityClassName') && !empty($input->getArgument('entityClassName'))) {
+            $entityClassName = (string)$input->getArgument('entityClassName');
+        }
 
-        $entityClassName = (string)$input->getArgument('entityClassName');
         if ((bool)($input->hasOption('strict') && $input->getOption('strict'))) {
             $this->configGeneratorService->enableStrictTypes();
         }
@@ -72,7 +79,7 @@ DESCRIPTION)
             $this->configGeneratorService->enableReadOnly();
         }
 
-        $this->configGeneratorService->setOutputInterface($output);
+        $this->configGeneratorService->setOutputInterface($io);
         try {
             $this->configGeneratorService->generateSqlSchemaCommand();
             $this->configGeneratorService->generateTableConfiguration($entityClassName);
