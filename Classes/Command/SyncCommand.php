@@ -108,6 +108,9 @@ class SyncCommand extends Command
                 ->where($queryBuilder->expr()->eq('processing', 1));
             $currentThreadCount = $query->executeQuery()->rowCount();
             if ($currentThreadCount >= $maxThreads) {
+                if ($output->isVerbose()) {
+                    $io->writeln('Maximum allowed threads of ' . $maxThreads . ' reached.');
+                }
                 return Command::SUCCESS;
             }
         }
