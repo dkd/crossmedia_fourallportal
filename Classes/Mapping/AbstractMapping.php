@@ -936,14 +936,6 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             $GLOBALS['TSFE']['sys_language_content'] = 0;
             $GLOBALS['TSFE']['config']['sys_language_uid'] = 0;
         }
-        /**  @see .build/vendor/typo3/cms-core/Documentation/Changelog/8.0/Breaking-72424-RemovedDeprecatedTypoScriptFrontendControllerOptionsAndMethods.rst */
-//    $GLOBALS['TSFE'] = new TypoScriptFrontendController($GLOBALS['TYPO3_CONF_VARS'], $event->getModule()->getStoragePid(), 0);
-//    $GLOBALS['TSFE']->sys_page = new PageRepository();
-//    $GLOBALS['TSFE']->sys_page->sys_language_uid = 0;
-//    $GLOBALS['TSFE']->getPageAndRootline();
-//    $GLOBALS['TSFE']->sys_language_content = 0;
-//    $GLOBALS['TSFE']->config['sys_language_uid'] = 0;
-//    $GLOBALS['TSFE']->settingLanguage();
 
         /** @var \Crossmedia\Fourallportal\Domain\Model\DimensionMapping[] $dimensionMappings */
         $dimensionMappings = $event->getModule()->getServer()->getDimensionMappings();
@@ -1001,23 +993,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                 continue;
             }
 
-            #$persistenceSession->destroy();
             $languageUid = $translationDimensionMapping->getLanguage();
-
-            /*
-            $GLOBALS['TSFE']->sys_language_content = $languageUid;
-            $GLOBALS['TSFE']->sys_page->sys_language_uid = $languageUid;
-            $GLOBALS['TSFE']->config['sys_language_uid'] = $languageUid;
-            $GLOBALS['TSFE']->settingLanguage();
-            */
-            /**  @see .build/vendor/typo3/cms-core/Documentation/Changelog/8.0/Breaking-72424-RemovedDeprecatedTypoScriptFrontendControllerOptionsAndMethods.rst */
-//      $GLOBALS['TSFE'] = new FrontendTypoScript($GLOBALS['TYPO3_CONF_VARS'], [$event->getModule()->getStoragePid(), 0]);
-//      $GLOBALS['TSFE']->sys_page = new PageRepository();
-//      $GLOBALS['TSFE']->sys_page->sys_language_uid = $languageUid;
-//      $GLOBALS['TSFE']->getPageAndRootline();
-//      $GLOBALS['TSFE']->sys_language_content = $languageUid;
-//      $GLOBALS['TSFE']->config['sys_language_uid'] = 0;
-//      $GLOBALS['TSFE']->settingLanguage();
 
             $queryBuilder = $this->connectionPool->getQueryBuilderForTable($this->getTableName());
             $queryBuilder->getRestrictions()->removeByType(HiddenRestriction::class);
@@ -1042,8 +1018,6 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             }
         }
 
-        #$persistenceSession->destroy();
-        #$persistenceSession->registerObject($event, get_class($event) . ':' . $event->getUid());
         $this->session->registerObject($event, get_class($event) . ':' . $event->getUid());
 
         return $mappingProblemsOccurred;
