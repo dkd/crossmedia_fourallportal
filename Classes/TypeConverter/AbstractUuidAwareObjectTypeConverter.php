@@ -75,7 +75,7 @@ abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConv
                 )
                 ->executeQuery();
             try {
-                $existingRecordUid = $existingRow->fetchOne()['uid'] ?? false;
+                $existingRecordUid = $existingRow->fetchOne();
             } catch (Exception $e) {
                 return null;
             }
