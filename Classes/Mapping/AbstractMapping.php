@@ -394,7 +394,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
 
         $propertyMapper = $this->getAccessiblePropertyMapper();
         $targetType = $this->determineDataTypeForProperty($propertyName, $object);
-        $array1 = (new ReflectionMethod(get_class($object), 'set' . ucfirst($propertyName)))->getParameters();
+        $setterMethodParameter = (new ReflectionMethod(get_class($object), 'set' . ucfirst($propertyName)))->getParameters();
         $collections = [];
         /*
          * Support of union types and determine collections (or nested types)
@@ -444,6 +444,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     try {
                         $child = $typeConverter->convertFrom($identifier, $childType, [], $configuration);
                     } catch (DeferralException $error) {
+                        $this->logger?->error($error->getMessage());
                         $this->loggingService->logObjectActivity($objectId, $error->getMessage(), 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
                         $mappingProblemsOccurred = true;
                         continue;
@@ -473,15 +474,36 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     if ($child instanceof Error) {
                         // For whatever reason, property validators will return a validation error rather than throw an exception.
                         // We therefore need to check this, log the problem, and skip the property.
-                        $message = 'Mapping error when mapping property ' . $propertyName . ' on ' . get_class($object) . ':' . $objectId .
-                            ' in language UID ' . $languageUid . ': ' . $child->getMessage();
+
+                        $message = vsprintf(
+                            'Mapping error when mapping property %1$s on %2$s:%3$s in language UID %4$s: %5$s',
+                            [
+                                $propertyName,
+                                get_class($object),
+                                $objectId,
+                                $languageUid,
+                                $child->getMessage()
+                            ]
+                        );
+                        $this->logger?->warning($message);
                         $this->loggingService->logObjectActivity($objectId, $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
                         $child = null;
                     }
 
                     if (!$child) {
-                        $message = 'Child of type ' . $childType . ' identified by ' . $identifier . ' not found when mapping property ' .
-                            $propertyName . ' on ' . get_class($object) . ':' . $objectId . ' in language UID ' . $languageUid;
+                        $message = vsprintf(
+                            'Child of type %1$s identified by %2$s not found when mapping property %3$s on %4$s:%5$s in language UID %6$s',
+                            [
+                                $childType,
+                                $identifier,
+                                $propertyName,
+                                get_class($object),
+                                $objectId,
+                                $languageUid
+                            ]
+                        );
+
+                        $this->logger?->error($message);
                         $this->loggingService->logObjectActivity($objectId, $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
                         $mappingProblemsOccurred = true;
                         continue;
@@ -534,6 +556,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     // For whatever reason, property validators will return a validation error rather than throw an exception.
                     // We therefore need to check this, log the problem, and skip the property.
                     $message = 'Mapping error when mapping property ' . $propertyName . ' on ' . get_class($object) . ':' . $objectId . ': ' . $propertyValue->getMessage();
+                    $this->logger?->warning($message);
                     $this->loggingService->logObjectActivity($objectId, $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
                     $propertyValue = null;
                 }
@@ -545,13 +568,14 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     }
                 }
             }
-        } elseif ($propertyValue === null && !reset($array1)->allowsNull()) {
+        } elseif ($propertyValue === null && !reset($setterMethodParameter)->allowsNull()) {
             $message = sprintf(
                 'Property "%s" on object "%s->%s" does not allow NULL as value, but NULL was resolved. Please verify PIM response data consistency!',
                 $propertyName,
                 get_class($object),
                 method_exists($object, 'getRemoteId') ? $object->getRemoteId() : $object->getUid()
             );
+            $this->logger?->critical($message);
             $this->loggingService->logObjectActivity($objectId, $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_FATAL*/);
             return false;
         }
