@@ -150,6 +150,7 @@ TEMPLATE;
      * @var array<string, string>
      */
     private array $usedClasses = [];
+    private array $propertySkipReason = [];
     private array $properties = [];
     private array $objectStorageProperties = [];
     private array $moduleCache = [];
@@ -565,6 +566,7 @@ TEMPLATE;
         $properties = [];
         // Clear internal cache
         $this->relationData = [];
+        $this->propertySkipReason = [];
         $moduleConfiguration = $module->getModuleConfiguration();
         $connectorConfiguration = $module->getConnectorConfiguration();
         $entityClassName = $module->getMapper()->getEntityClassName();
@@ -624,9 +626,17 @@ TEMPLATE;
                     'config' => $tca
                 ];
             } catch (UndefinedModuleException $error) {
-                $this->output?->writeln(' !!!SKIPPED!!! ' . $error->getMessage());
+                $this->propertySkipReason[] = [
+                    $fieldName,
+                    $error->getMessage()
+                ];
+                $infoTableData[$rowCounter][4] = 'Skip';
             } catch (RuntimeException $error) {
-                $this->output?->writeln(' !!!SKIPPED!!! ' . $error->getMessage());
+                $this->propertySkipReason[] = [
+                    $fieldName,
+                    $error->getMessage()
+                ];
+                $infoTableData[$rowCounter][4] = 'Skip';
                 if (Environment::getContext()->isDevelopment()) {
                     throw $error;
                 }
@@ -644,6 +654,14 @@ TEMPLATE;
                     'status'
                 ],
                 $infoTableData
+            );
+
+            $this->output->table(
+                [
+                    'Field',
+                    'Reason why skipped'
+                ],
+                $this->propertySkipReason
             );
 
             $this->output->table(
@@ -1679,26 +1697,41 @@ TEMPLATE;
     {
         $map = MappingRegister::resolvePropertyMapForMapper($module->getMappingClass());
         if (isset($fieldConfiguration['child']) && !empty($validModuleNames) && !in_array($fieldConfiguration['child'], $validModuleNames)) {
-            $this->output?->writeln(' - skipped; is a reference to undefined module ' . var_export($fieldConfiguration['child'], true));
+            $this->propertySkipReason[] = [
+                $fieldName,
+                'Is a reference to undefined module ' . var_export($fieldConfiguration['child'], true)
+            ];
             return true;
         } elseif (($map[$fieldName] ?? null) === false) {
             // This property is explicitly mapped in the mapping array, indicating it is manually
             // added to the sub-class of the abstract class we are generating, thus needs to be skipped.
-            $this->output?->writeln(' - skipped; intentionally marked as ignored in property mapping config');
+            $this->propertySkipReason[] = [
+                $fieldName,
+                'Intentionally marked as ignored in property mapping config'
+            ];
             return true;
         } elseif (($map[$fieldName] ?? false) !== false) {
             // This property is explicitly mapped in the mapping array, indicating it is manually
             // added to the sub-class of the abstract class we are generating, thus needs to be skipped.
-            $this->output?->writeln(' - skipped; has custom mapping to ' . var_export($map[$fieldName], true));
+            $this->propertySkipReason[] = [
+                $fieldName,
+                'Has custom mapping to ' . var_export($map[$fieldName], true)
+            ];
             return true;
         } elseif (MappingRegister::resolvePropertyValueSetter($module->getMappingClass(), $fieldName)) {
             // Properties which are mapped using ValueSetter implementations must be skipped.
-            $this->output?->writeln(' - skipped; has custom value setter');
+            $this->propertySkipReason[] = [
+                $fieldName,
+                'Has custom value setter'
+            ];
             return true;
         } elseif (preg_match('/[^a-z0-9_]/i', $fieldName) || preg_match('/[^a-z]/i', $fieldName[0]) && ($map[$fieldName] ?? false) !== false) {
             // Property uses a name that is impossible to express as SQL type and it was NOT defined in
             // the property map for the class. This must yield an exception.
-            $this->output?->writeln(' - skipped; field name is invalid');
+            $this->propertySkipReason[] = [
+                $fieldName,
+                'Field name is invalid'
+            ];
             throw new RuntimeException(
                 sprintf(
                     'Property "%s" should map to "%s" but the property name contains invalid characters and is ' .
