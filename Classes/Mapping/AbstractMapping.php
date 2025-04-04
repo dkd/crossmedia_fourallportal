@@ -298,7 +298,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
 
     /**
      * @param array $data
-     * @param AbstractEntity $object
+     * @param AbstractEntity|File $object
      * @param Module $module
      * @param DimensionMapping|null $dimensionMapping
      * @return bool
@@ -575,14 +575,14 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                 get_class($object),
                 method_exists($object, 'getRemoteId') ? $object->getRemoteId() : $object->getUid()
             );
-            $this->logger?->critical($message);
+            $this->logger?->error($message);
             $this->loggingService->logObjectActivity($objectId, $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_FATAL*/);
             return false;
         }
 
         $setOnObject = $object;
         $lastPropertyName = $propertyName;
-        if (strpos($propertyName, '.') !== false) {
+        if (str_contains($propertyName, '.')) {
             $propertyPath = explode('.', $propertyName);
             $lastPropertyName = array_pop($propertyPath);
             foreach ($propertyPath as $currentPropertyName) {
