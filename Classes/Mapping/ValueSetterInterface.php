@@ -3,16 +3,18 @@ namespace Crossmedia\Fourallportal\Mapping;
 
 use Crossmedia\Fourallportal\Domain\Model\DimensionMapping;
 use Crossmedia\Fourallportal\Domain\Model\Module;
+use TYPO3\CMS\Core\Resource\FileInterface;
+use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 
 interface ValueSetterInterface
 {
     public function setValueOnObject(
         $value,
-        $sourcePropertyName,
+        string $sourcePropertyName,
         array $inputData,
-        $object,
+        DomainObjectInterface|FileInterface $object,
         Module $module,
         MappingInterface $mappingClass,
-        DimensionMapping $dimensionMapping = null
-    );
+        DimensionMapping|null $dimensionMapping = null
+    ): void;
 }
