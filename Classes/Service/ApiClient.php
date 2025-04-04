@@ -257,7 +257,7 @@ class ApiClient
         $connectorConfig = $this->getConnectorConfig($connectorName);
 
         $response = $this->doPostRequest(
-            $uri = $this->server->getRestUrl() . 'PAPRemoteService/getEvents',
+            $this->server->getRestUrl() . 'PAPRemoteService/getEvents',
             [
                 $this->sessionId,
                 $connectorName,
