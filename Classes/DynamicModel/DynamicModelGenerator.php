@@ -74,10 +74,10 @@ class %s extends %s
 %s
     public function __construct()
     {
-        \$this->initializeStorageObjects();
+        \$this->initializeObject();
     }
 
-    public function initializeStorageObjects()%s
+    public function initializeObject()%s
     {
 %s
     }
