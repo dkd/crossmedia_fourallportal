@@ -1773,8 +1773,11 @@ TEMPLATE;
                 }
             }
         }
+
+        // Null should be the first type
+        // @https://docs.typo3.org/m/typo3/reference-coreapi/12.4/en-us/ExtensionArchitecture/Extbase/Reference/Domain/Model/Index.html#extbase-model-properties-union-types
         if ($allowNull || ($hasDefaultValue && ($value === null || $value === 'null'))) {
-            $typeString .= '|null';
+            $typeString = 'null|' . $typeString;
         }
 
         $typeWithSubtypes = [];
