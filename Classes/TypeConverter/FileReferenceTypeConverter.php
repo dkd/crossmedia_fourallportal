@@ -59,6 +59,9 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
    */
   public function convertFrom($source, string $targetType, array $convertedChildProperties = [], PropertyMappingConfigurationInterface $configuration = null): ?object
   {
+    if (!isset($this->parentObject)) {
+      return null;
+    }
     $dataMap = $this->dataMapFactory->buildDataMap(get_class($this->parentObject));
 
     $systemLanguageUid = (int)$this->parentObject->_getProperty('_languageUid');
