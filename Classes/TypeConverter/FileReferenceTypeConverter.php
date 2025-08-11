@@ -25,9 +25,9 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
     'string'
   ];
   protected DataMapFactory|null $dataMapFactory = null;
-
   protected FileRepository|null $fileRepository = null;
-  public function __construct(\TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapFactory $dataMapFactory, \TYPO3\CMS\Core\Resource\FileRepository $fileRepository)
+
+  public function __construct(DataMapFactory $dataMapFactory, FileRepository $fileRepository)
   {
       $this->dataMapFactory = $dataMapFactory;
       $this->fileRepository = $fileRepository;
@@ -57,8 +57,12 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
    * @throws InvalidSourceException
    * @throws TargetNotFoundException
    */
-  public function convertFrom($source, string $targetType, array $convertedChildProperties = [], PropertyMappingConfigurationInterface $configuration = null): ?object
-  {
+  public function convertFrom(
+    $source,
+    string $targetType,
+    array $convertedChildProperties = [],
+    PropertyMappingConfigurationInterface $configuration = null
+  ): ?object {
     if (!isset($this->parentObject)) {
       return null;
     }
@@ -72,18 +76,22 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
     // there is no Repository which we could use to load an Extbase file reference base on criteria.
     // So instead we probe the DB and if a match is found, we know the existing property value is the
     // exact same relation we were asked to convert - and we return the current property value.
-    $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file')->createQueryBuilder();
+    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+      ->getConnectionForTable('sys_file')
+      ->createQueryBuilder();
     $queryBuilder->getRestrictions()->removeAll()->add(GeneralUtility::makeInstance(DeletedRestriction::class));
-    $query = $queryBuilder->select('r.*')->from('sys_file', 'f')->join('f', 'sys_file_reference', 'r', 'r.uid_local = f.uid')->where(
-      sprintf(
-        'f.remote_id = \'%s\' AND r.tablenames = \'%s\' AND r.fieldname = \'%s\' AND r.uid_foreign = %d AND r.sys_language_uid = %d',
-        $source,
-        $dataMap->getTableName(),
-        $fieldName,
-        $this->parentObject->getUid(),
-        $systemLanguageUid
-      )
-    )->setMaxResults(1);
+    $constraints = [
+      $queryBuilder->expr()->eq('f.remote_id', $queryBuilder->quote($source, \PDO::PARAM_STR)),
+      $queryBuilder->expr()->eq('r.tablenames', $queryBuilder->quote($dataMap->getTableName(), \PDO::PARAM_STR)),
+      $queryBuilder->expr()->eq('r.fieldname', $queryBuilder->quote($fieldName, \PDO::PARAM_STR)),
+      $queryBuilder->expr()->eq('r.uid_foreign', $queryBuilder->quote((int)$this->parentObject->getUid(), \PDO::PARAM_INT)),
+      $queryBuilder->expr()->eq('r.sys_language_uid', $queryBuilder->quote((int)$systemLanguageUid, \PDO::PARAM_INT)),
+    ];
+    $query = $queryBuilder->select('r.*')
+      ->from('sys_file', 'f')
+      ->join('f', 'sys_file_reference', 'r', 'r.uid_local = f.uid')
+      ->where(...$constraints)
+      ->setMaxResults(1);
     $references = $query->execute()->fetchAll();
     if (isset($references[0]['uid'])) {
       return $this->fetchObjectFromPersistence((int)$references[0]['uid'], $targetType);
@@ -93,9 +101,16 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
     // file relation. If the original file cannot be found this way the relation is considered
     // invalid or impossible to resolve - and an exception is thrown, causing the importing to be
     // resumed on next run which should then have imported the target file so we can point to it.
-    $queryBuilder = (new ConnectionPool())->getConnectionForTable('sys_file')->createQueryBuilder();
-    $original = $queryBuilder->select('f.uid')->from('sys_file', 'f')
-      ->where($queryBuilder->expr()->eq('f.remote_id', $queryBuilder->quote($source)))->setMaxResults(1)->executeQuery()->fetchAllAssociative();
+    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+      ->getConnectionForTable('sys_file')
+      ->createQueryBuilder();
+    $original = $queryBuilder
+      ->select('f.uid')
+      ->from('sys_file', 'f')
+      ->where($queryBuilder->expr()->eq('f.remote_id', $queryBuilder->quote($source)))
+      ->setMaxResults(1)
+      ->executeQuery()
+      ->fetchAllAssociative();
     if (!isset($original[0]['uid'])) {
       $parentObjectId = method_exists($this->parentObject, 'getRemoteId') ? $this->parentObject->getRemoteId() : $this->parentObject->getUid();
       throw new DeferralException(
@@ -113,13 +128,130 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
       'fieldname' => $fieldName,
       'uid_local' => $original[0]['uid'],
       'uid_foreign' => $this->parentObject->getUid(),
-      'sys_language_uid' => $systemLanguageUid,
+      $GLOBALS['TCA']['sys_file_reference']['ctrl']['languageField'] => $systemLanguageUid,
     ];
 
-    $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('sys_file_reference');
+    if ($GLOBALS['TCA']['sys_file_reference']['ctrl']['crdate']) {
+        $referenceProperties[$GLOBALS['TCA']['sys_file_reference']['ctrl']['crdate']] = time();
+    }
+
+    if ($GLOBALS['TCA']['sys_file_reference']['ctrl']['tstamp']) {
+        $referenceProperties[$GLOBALS['TCA']['sys_file_reference']['ctrl']['tstamp']] = time();
+    }
+
+    if ($systemLanguageUid > 0) {
+      // Value of 'uid_local' pointed to the translated file
+      $translatedFile = $this->determineDataUid(
+        'sys_file',
+        (int)($original[0]['uid'] ?? 0),
+        $systemLanguageUid
+      );
+
+      $originalFile = $translatedFile !== (int)($original[0]['uid']) ? (int)($original[0]['uid']) : $translatedFile;
+
+      // Point to the possible translated file
+      if ($originalFile !== $translatedFile) {
+        $referenceProperties['uid_local'] = $translatedFile;
+      }
+
+      // The value of uid foreign should point to the uid of the translation
+      $uidForeign = $this->determineDataUid(
+        $dataMap->getTableName(),
+        $this->parentObject->getUid(),
+        $systemLanguageUid
+      );
+
+      $originalData = $uidForeign !== $this->parentObject->getUid() ? $this->parentObject->getUid() : $uidForeign;
+
+      // Point to the possible translated data set
+      if ($uidForeign !== $originalData) {
+        $referenceProperties['uid_foreign'] = $uidForeign;
+      }
+
+      /*
+       * Add translation information
+       * The field 'uid_local' should point to a possible translated file id
+       * The field 'uid_foreign' should point to the translated data
+       * The field 'transOrigPointerField' must point to the original reference entry
+       */
+      $originReference = $this->findReferenceOrigin(
+        $dataMap->getTableName(),
+        $fieldName,
+        $originalFile,
+        $originalData
+      );
+
+      if ($originReference !== false) {
+        $referenceProperties[$GLOBALS['TCA']['sys_file_reference']['ctrl']['transOrigPointerField']] = $originReference['uid'];
+      }
+    }
+
+    $connection = GeneralUtility::makeInstance(ConnectionPool::class)
+      ->getConnectionForTable('sys_file_reference');
     $connection->insert('sys_file_reference', $referenceProperties);
     $referenceProperties['uid'] = $connection->lastInsertId('sys_file_reference');
     return $this->fetchObjectFromPersistence((int)$referenceProperties['uid'], $targetType);
+  }
+
+  /**
+   * Determine the correct data uid
+   *
+   * @param string $tableName
+   * @param int $uid
+   * @param int $languageUid
+   * @return int
+   */
+  protected function determineDataUid(string $tableName, int $uid, int $languageUid = 0): int
+  {
+    if ($uid === 0) {
+      return 0;
+    }
+    $columnTranslation = $GLOBALS['TCA'][$tableName]['ctrl']['languageField'] ?? null;
+    $columnTranslationParent = $GLOBALS['TCA'][$tableName]['ctrl']['transOrigPointerField'] ?? null;
+    if (empty($columnTranslation) || empty($columnTranslationParent)) {
+      return $uid;
+    }
+    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+      ->getConnectionForTable($tableName)
+      ->createQueryBuilder();
+    $translation = $queryBuilder
+      ->select('uid')
+      ->from($tableName)
+      ->where(
+        $queryBuilder->expr()->eq($columnTranslation, $queryBuilder->quote($languageUid, \PDO::PARAM_INT)),
+        $queryBuilder->expr()->eq($columnTranslationParent, $queryBuilder->quote($uid, \PDO::PARAM_INT)),
+      )
+      ->setMaxResults(1)
+      ->executeQuery()
+      ->fetchAllAssociative();
+    if ($translation === false) {
+        return $uid;
+    } else {
+        return (int)$translation[0]['uid'];
+    }
+  }
+
+  protected function findReferenceOrigin(
+    string $tableName,
+    string $fieldName,
+    int $fileUid,
+    int $referenceUid
+  ): array|false {
+      $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+        ->getConnectionForTable('sys_file_reference')
+        ->createQueryBuilder();
+      return $queryBuilder
+        ->select('f.uid')
+        ->from('sys_file_reference', 'f')
+        ->where(
+          $queryBuilder->expr()->eq('tablenames', $queryBuilder->quote($tableName, \PDO::PARAM_STR)),
+          $queryBuilder->expr()->eq('fieldname', $queryBuilder->quote($fieldName, \PDO::PARAM_STR)),
+          $queryBuilder->expr()->eq('uid_local', $queryBuilder->quote($fileUid, \PDO::PARAM_INT)),
+          $queryBuilder->expr()->eq('uid_foreign', $queryBuilder->quote($referenceUid, \PDO::PARAM_INT)),
+        )
+        ->setMaxResults(1)
+        ->executeQuery()
+        ->fetchAllAssociative();
   }
 
   /**
@@ -129,5 +261,4 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
   {
     return $this->fileRepository;
   }
-
 }
