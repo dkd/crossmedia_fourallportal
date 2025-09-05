@@ -160,12 +160,14 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
         $this->parentObject->getUid(),
         $systemLanguageUid
       );
+      $originalData = $this->parentObject->getUid();
 
-      $originalData = $uidForeign !== $this->parentObject->getUid() ? $this->parentObject->getUid() : $uidForeign;
-
-      // Point to the possible translated data set
-      if ($uidForeign !== $originalData) {
-        $referenceProperties['uid_foreign'] = $uidForeign;
+      if ($uidForeign > 0) {
+          $originalData = $uidForeign !== $this->parentObject->getUid() ? $this->parentObject->getUid() : $uidForeign;
+          // Point to the possible translated data set
+          if ($uidForeign !== $originalData) {
+              $referenceProperties['uid_foreign'] = $uidForeign;
+          }
       }
 
       /*
@@ -249,9 +251,8 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
           $queryBuilder->expr()->eq('uid_local', $queryBuilder->quote($fileUid, \PDO::PARAM_INT)),
           $queryBuilder->expr()->eq('uid_foreign', $queryBuilder->quote($referenceUid, \PDO::PARAM_INT)),
         )
-        ->setMaxResults(1)
         ->executeQuery()
-        ->fetchAllAssociative();
+        ->fetchAssociative();
   }
 
   /**
