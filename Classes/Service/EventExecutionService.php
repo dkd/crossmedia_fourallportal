@@ -624,6 +624,16 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       }
 
       $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
+      $this->eventRepository->update($event);
+      try {
+        $this->persistenceManager->persistAll();
+      } catch (Exception $exception) {
+      }
+      $this->response
+        ->setDescription(
+           'Event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '" failed. See log or event for details' .  PHP_EOL
+        )
+        ->send();
       throw $exception;
     }
     $responseMetadata = $client->getLastResponse();
