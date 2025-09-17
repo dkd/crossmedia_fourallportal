@@ -92,7 +92,9 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
       ->join('f', 'sys_file_reference', 'r', 'r.uid_local = f.uid')
       ->where(...$constraints)
       ->setMaxResults(1);
-    $references = $query->execute()->fetchAll();
+    $references = $query
+        ->executeQuery()
+        ->fetchAllAssociative();
     if (isset($references[0]['uid'])) {
       return $this->fetchObjectFromPersistence((int)$references[0]['uid'], $targetType);
     }

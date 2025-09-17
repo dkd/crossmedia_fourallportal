@@ -142,7 +142,9 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
       ->from('sys_file_reference')
       ->where('uid_local = :fileUid AND deleted = 0')
       ->setParameter('fileUid', $record['uid']);
-    $existingReferences = $query->execute()->fetchAll();
+    $existingReferences = $query
+        ->executeQuery()
+        ->fetchAll();
 
     list ($referringRecords, $referringObjects) = $this->collectTablesAndRecordsWithRelationsToFileReferences($existingReferences);
 
@@ -404,7 +406,9 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
       ->where($queryBuilder->expr()->eq('f.uid', $file->getUid()))
       ->setMaxResults(1);
 
-    if (!is_int($query->execute())) {
+    try {
+      $query->executeStatement();
+    } catch (\Throwable) {
       throw new RuntimeException('Failed to update remote_id column of sys_file table for file with UID ' . $file->getUid(), 6838585740);
     }
 
