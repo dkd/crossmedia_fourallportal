@@ -7,6 +7,7 @@ use Crossmedia\Fourallportal\Domain\Model\Module;
 use Crossmedia\Fourallportal\Domain\Model\Server;
 use Crossmedia\Fourallportal\Domain\Repository\ServerRepository;
 use Crossmedia\Fourallportal\Error\ApiException;
+use Crossmedia\Fourallportal\Event\Tca\FieldSettingsEvent;
 use Crossmedia\Fourallportal\Mapping\MappingRegister;
 use RuntimeException;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -16,6 +17,7 @@ use TYPO3\CMS\Core\Cache\Exception\NoSuchCacheException;
 use TYPO3\CMS\Core\Cache\Frontend\AbstractFrontend;
 use TYPO3\CMS\Core\Cache\Frontend\PhpFrontend;
 use TYPO3\CMS\Core\Core\Environment;
+use TYPO3\CMS\Core\EventDispatcher\EventDispatcher;
 use TYPO3\CMS\Core\Resource\File;
 use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -169,7 +171,8 @@ TEMPLATE;
     public function __construct(
         protected ServerRepository $serverRepository,
         protected DataMapper $dataMapper,
-        protected PersistenceManager $persistenceManager
+        protected PersistenceManager $persistenceManager,
+        protected EventDispatcher $eventDispatcher,
     ) {
     }
 
@@ -693,15 +696,26 @@ TEMPLATE;
      */
     protected function guessLocalTypesFromRemoteField(string $originalName, array $fieldConfiguration, string $currentSideModuleName): array
     {
+        $modules = $this->getAllConfiguredModules();
+        $entityName = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
+        $tableNameCurrent = $this->dataMapper->getDataMap($entityName)->getTableName();
         $textFieldTypes = ['CEText', 'MAMString', 'XMPString'];
         if (array_key_exists('fulltext', $fieldConfiguration) && in_array($fieldConfiguration['type'], $textFieldTypes)) {
             // Shortcut: any fulltext/text typed fields will be "string" in class property and "text" in SQL
+            $tca = [
+                'type' => 'text'
+            ];
+            $tcaEvent = new FieldSettingsEvent(
+                $fieldConfiguration['type'],
+                $tableNameCurrent,
+                $originalName,
+                $tca
+            );
+            $tcaEvent = $this->eventDispatcher->dispatch($tcaEvent);
             return [
                 'string',
                 'text',
-                [
-                    'type' => 'text'
-                ]
+                $tcaEvent->getTca()
             ];
         }
 
@@ -831,13 +845,13 @@ TEMPLATE;
 
         if (!$dataType && !$sqlType) {
             // The field was not of a standard type and is most likely a "ComplexType".
-
             $modules = $this->getAllConfiguredModules();
             $entityNameParent = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
             $entityShortNameParent = GeneralUtility::camelCaseToLowerCaseUnderscored(substr($entityNameParent, strrpos($entityNameParent, '\\') + 1));
             $tableNameParent = $this->dataMapper->getDataMap($entityNameParent)->getTableName();
             $dataType = '\\' . ComplexType::class;
             $sqlType = 'int(11) DEFAULT 0 NOT NULL';
+
             $tca = [
                 'type' => 'select',
                 'renderType' => 'selectSingle',
@@ -853,11 +867,18 @@ TEMPLATE;
                 'maxitems' => 1
             ];
         }
+        $tcaEvent = new FieldSettingsEvent(
+            $fieldConfiguration['type'],
+            $tableNameCurrent,
+            $fieldName,
+            $tca
+        );
 
+        $tcaEvent = $this->eventDispatcher->dispatch($tcaEvent);
         return [
             $dataType,
             $sqlType,
-            $tca
+            $tcaEvent->getTca()
         ];
     }
 
@@ -1174,10 +1195,11 @@ TEMPLATE;
         if (!($tca['foreign_table'] ?? false) && ($tca['type'] ?? false) !== 'group') {
             throw new UndefinedModuleException(
                 sprintf(
-                    'Field "%s" defines a CEExternalId or CEExternalIdList which does not configure a related module. ' .
+                    'Field "%1$s" defines a %2$s which does not configure a related module. ' .
                     'Normally this would mean that this field should be mapped to a plain string value, but due to the ' .
                     'ambiguity in target resource type, we require that you manually map or ignore this particular field.',
-                    $fieldConfiguration['field']
+                    $fieldConfiguration['field'],
+                    $fieldType
                 ), 5649592310
             );
         }
