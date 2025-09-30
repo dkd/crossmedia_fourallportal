@@ -9,6 +9,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -30,7 +31,14 @@ class GetConfigurationCommand extends Command
             ->setDescription('Get module and connector configuration')
             ->setHelp('Gets the module and connector configuration for the module identified by $moduleName, and outputs it as JSON.')
             ->addArgument('moduleName', InputArgument::REQUIRED, 'Name of module for which to get configuration')
-            ->addArgument('server', InputArgument::OPTIONAL, 'Optional UID of server, defaults to active server', 0);
+            ->addOption(
+                'server',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Optional UID of server, defaults to active server',
+                0
+            )
+        ;
     }
 
     /**
@@ -42,7 +50,7 @@ class GetConfigurationCommand extends Command
         $io->title($this->getDescription());
 
         $moduleName = (string)$input->getArgument('moduleName');
-        $serverId = (int)$input->getArgument('server');
+        $serverId = (int)$input->getOption('server');
 
         if ($serverId === 0) {
             /** @var Server $server */

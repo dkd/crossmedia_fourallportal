@@ -9,6 +9,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use TYPO3\CMS\Extbase\Persistence\Exception\IllegalObjectTypeException;
@@ -37,8 +38,21 @@ for the provided module named by connector or module name.
 By default, the command replays only the last event.
 DESCRIPTION)
             ->addArgument('module', InputArgument::REQUIRED, 'module name')
-            ->addArgument('events', InputArgument::OPTIONAL, 'event id', 1)
-            ->addArgument('objectId', InputArgument::OPTIONAL, 'object Id', null);
+            ->addOption(
+                'events',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'The amount of events to process',
+                1
+            )
+            ->addOption(
+                'object-id',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'The id of the object to replay',
+                null
+            )
+        ;
     }
 
     /**
@@ -50,8 +64,8 @@ DESCRIPTION)
         $io->title($this->getDescription());
 
         $module = (string)$input->getArgument('module');
-        $events = (int)$input->getArgument('events');
-        $objectId = $input->getArgument('objectId');
+        $events = (int)$input->getOption('events');
+        $objectId = $input->getOption('object-id');
 
         $consoleResponse = new ConsoleResponse($io);
         $this->eventExecutionService->setResponse($consoleResponse);

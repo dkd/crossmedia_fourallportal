@@ -41,10 +41,6 @@ class SyncCommand extends Command
             ->setDescription('Sync data')
             ->setHelp("Execute this to synchronise events from the PIM API")
             ->addArgument('module', InputArgument::OPTIONAL, 'If passed can be used to only sync one module, using the module or connector name it has in 4AP', null)
-            ->addArgument('exclude', InputArgument::OPTIONAL, 'Exclude a list of modules from processing (CSV string module names)', null)
-            ->addArgument('maxEvents', InputArgument::OPTIONAL, 'Maximum number of events to process. Default is unlimited. Affects only the number of events being executed, if sync is enabled will still sync all', 0)
-            ->addArgument('maxTime', InputArgument::OPTIONAL, 'Maximum number of seconds that the sync is allowed to run, once expired, will require a new execution to continue', 0)
-            ->addArgument('maxThreads', InputArgument::OPTIONAL, 'Maximum number of concurrent threads which are allowed to execute events. Ignored if sync=true', 4)
             ->addOption(
                 'sync',
                 null,
@@ -58,17 +54,46 @@ class SyncCommand extends Command
                 'Trigger a full sync'
             )
             ->addOption(
+                'execute',
+                null,
+                InputOption::VALUE_NONE,
+                'Executes events after receiving (syncing) events'
+            )
+            ->addOption(
                 'force',
                 'f',
                 InputOption::VALUE_NONE,
                 'Forces the sync to run regardless of lock and will neither lock nor unlock the task'
             )
             ->addOption(
-                'execute',
+                'exclude',
                 null,
-                InputOption::VALUE_NONE,
-                'Executes events after receiving (syncing) events'
-            );
+                InputOption::VALUE_REQUIRED,
+                'Exclude a list of modules from processing (CSV string module names)',
+                null
+            )
+            ->addOption(
+                'max-events',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Maximum number of events to process. Default is unlimited. Affects only the number of events being executed, if sync is enabled will still sync all',
+                0
+            )
+            ->addOption(
+                'max-time',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Maximum number of seconds that the sync is allowed to run, once expired, will require a new execution to continue',
+                0
+            )
+            ->addOption(
+                'max-threads',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Maximum number of concurrent threads which are allowed to execute events. Ignored if sync=true',
+                4
+            )
+        ;
     }
 
     /**
@@ -82,12 +107,12 @@ class SyncCommand extends Command
         $sync = $input->hasOption('sync') && $input->getOption('sync');
         $fullSync = $input->hasOption('full-sync') && $input->getOption('full-sync');
         $module = $input->getArgument('module');
-        $exclude = (string)$input->getArgument('exclude');
+        $exclude = (string)$input->getOption('exclude');
         $force = $input->hasOption('force') && $input->getOption('force');
         $execute = $input->hasOption('execute') && $input->getOption('execute');
-        $maxEvents = (int)$input->getArgument('maxEvents');
-        $maxTime = (int)$input->getArgument('maxTime');
-        $maxThreads = (int)$input->getArgument('maxThreads');
+        $maxEvents = (int)$input->getOption('max-events');
+        $maxTime = (int)$input->getOption('max-time');
+        $maxThreads = (int)$input->getOption('max-threads');
 
         // If option sync is enabled
         if ($fullSync && !$sync) {

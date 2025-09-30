@@ -1278,6 +1278,7 @@ TEMPLATE;
                 $foreignFieldName
             ]
         );
+
         /*
          * Shrink name to the maximum allowed size
          * Remove enough characters from the end and add the calculated hash
