@@ -331,7 +331,16 @@ TEMPLATE;
             $tableName,
             $tca['columns']['l10n_parent']['config']['foreign_table_where']
         );
-        $tca['ctrl']['label'] = key($additionalColumns);
+        $labelColumn = key($additionalColumns);
+        // Try to find a possible label. This should be of type input.
+        foreach ($additionalColumns as $columnName => $settings) {
+            $type = (string)($settings['config']['type'] ?? 'unknown');
+            if ($type === 'input') {
+                $labelColumn = $columnName;
+                break;
+            }
+        }
+        $tca['ctrl']['label'] = $labelColumn;
         $tca['ctrl']['iconfile'] = 'EXT:' . $extensionKey . '/Resources/Public/Icons/' . $tableName . '.' . pathinfo($detectedIconFile, PATHINFO_EXTENSION);
         $tca['ctrl']['title'] = 'LLL:EXT:' . $extensionKey . '/Resources/Private/Language/locallang.xlf:' . $tableName;
         return $tca;
