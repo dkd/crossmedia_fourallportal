@@ -8,6 +8,7 @@ use Crossmedia\Fourallportal\Domain\Model\Server;
 use Crossmedia\Fourallportal\Domain\Repository\ServerRepository;
 use Crossmedia\Fourallportal\Error\ApiException;
 use Crossmedia\Fourallportal\Event\Tca\FieldSettingsEvent;
+use Crossmedia\Fourallportal\Event\Tca\LabelFieldEvent;
 use Crossmedia\Fourallportal\Mapping\MappingRegister;
 use RuntimeException;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -340,7 +341,15 @@ TEMPLATE;
                 break;
             }
         }
-        $tca['ctrl']['label'] = $labelColumn;
+
+        $labelFieldEvent = new LabelFieldEvent(
+            $tableName,
+            $labelColumn,
+            array_keys($additionalColumns),
+        );
+        $labelFieldEvent = $this->eventDispatcher->dispatch($labelFieldEvent);
+
+        $tca['ctrl']['label'] = $labelFieldEvent->getLabelField();
         $tca['ctrl']['iconfile'] = 'EXT:' . $extensionKey . '/Resources/Public/Icons/' . $tableName . '.' . pathinfo($detectedIconFile, PATHINFO_EXTENSION);
         $tca['ctrl']['title'] = 'LLL:EXT:' . $extensionKey . '/Resources/Private/Language/locallang.xlf:' . $tableName;
         return $tca;
