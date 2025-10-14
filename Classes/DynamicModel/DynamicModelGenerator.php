@@ -156,6 +156,10 @@ TEMPLATE;
     private array $propertySkipReason = [];
     private array $properties = [];
     private array $objectStorageProperties = [];
+
+    /**
+     * @var array<string, \Crossmedia\Fourallportal\Domain\Model\Module>
+     */
     private array $moduleCache = [];
     private array $moduleFieldConfigurationCache = [];
     private array $relationData = [];
@@ -666,6 +670,9 @@ TEMPLATE;
         }
 
         if ($this->output instanceof SymfonyStyle && $this->output?->isVerbose() ?? false) {
+
+            $this->output->writeln('Available fields');
+
             $this->output->table(
                 [
                     'Property',
@@ -677,6 +684,8 @@ TEMPLATE;
                 $infoTableData
             );
 
+            $this->output->writeln('Why are fields not in the export');
+
             $this->output->table(
                 [
                     'Field',
@@ -684,6 +693,8 @@ TEMPLATE;
                 ],
                 $this->propertySkipReason
             );
+
+            $this->output->writeln('Relation data');
 
             $this->output->table(
                 [
@@ -1008,7 +1019,7 @@ TEMPLATE;
 
         $fieldType = $overriddenType ?? $fieldConfiguration['type'];
         $isLocalColumn = $currentSideModuleName === $fieldConfiguration['parent'];
-        $itSelfReferencing = $currentTableName === $foreignTableName;
+        $itSelfReferencing = $fieldConfiguration['relation_type'] === 'self';
 
         switch ($fieldType) {
             // M:N is expressed to TYPO3 as any other relation, but having an "MM" entry in the TCA containing a table name.
@@ -1023,124 +1034,16 @@ TEMPLATE;
                 $tca['MM_hasUidField'] = true;
                 $tca['multiple'] = true;
                 $tca['allowed'] = $foreignTableName;
-                $relationTarget = $isLocalColumn ? 'child' : 'parent';
-                $relatedModuleConfiguration = $this->getModuleConfiguration($fieldConfiguration[$relationTarget]);
-                $relationConfiguraton = $relatedModuleConfiguration['relation_conf'][$fieldConfiguration['name']] ?? [];
-                $relatedModuleFields = $this->getModuleFieldConfiguration($fieldConfiguration[$relationTarget]);
 
-                /*
-                 * Self referencing table required MM_opposite_field
-                 */
-                if ($itSelfReferencing) {
-                    [$prefix,] = explode('_domain_model_', $currentTableName, 2);
-                    $isMain = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName) === GeneralUtility::camelCaseToLowerCaseUnderscored($fieldConfiguration['field']);
-                    /*
-                     * Important
-                     * Detect the correct foreign column name is fragile. If could be either stored within the field or the name
-                     *
-                     * Self referencein table are a bit more complicated, since a check is needed to make sure
-                     * that local and foreign columns are not equal
-                     */
-                    if ($isMain) {
-                        $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
-                        $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
-                        if (!array_key_exists($columnNameForeign, $relatedModuleFields) || $columnNameForeign === $columnNameLocal) {
-                            $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
-                        }
-                        if (!array_key_exists($columnNameForeign, $relatedModuleFields)) {
-                            throw new Exception(
-                                vsprintf(
-                                    'Could not determine child column %2$s nor %3$s for relation on column %1$s',
-                                    [
-                                        $fieldName,
-                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
-                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
-                                    ]
-                                )
-                            );
-                        }
-                    } else {
-                        $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
-                        $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
-                        if (!array_key_exists($columnNameLocal, $relatedModuleFields) || $columnNameLocal === $columnNameForeign) {
-                            $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
-                        }
-                        if (!array_key_exists($columnNameLocal, $relatedModuleFields)) {
-                            throw new Exception(
-                                vsprintf(
-                                    'Could not determine parent column %2$s nor %3$s for relation on column %1$s',
-                                    [
-                                        $fieldName,
-                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
-                                        GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
-                                    ]
-                                )
-                            );
-                        }
-
-                        if (!in_array($columnNameLocal, self::RELATION_DISSALLOWED_OPPOSITE_FIELD)) {
-                            $tca['MM_opposite_field'] = $columnNameLocal;
-                        }
-                    }
-                } elseif ($isLocalColumn) {
-                    [$prefix,] = explode('_domain_model_', $currentTableName, 2);
-                    $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
-                    /*
-                     * The value of name contains the field name of the foreign column
-                     * which is a combination of the value of 'child' and the prefix 'parent'
-                     */
-                    $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
-                    if (!array_key_exists($columnNameForeign, $relatedModuleFields)) {
-                        $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
-                    }
-                    if (!array_key_exists($columnNameForeign, $relatedModuleFields)) {
-                        throw new Exception(
-                            vsprintf(
-                                'Could not determine child column %2$s nor %3$s for relation on column %1$s',
-                                [
-                                    $fieldName,
-                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
-                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
-                                ]
-                            )
-                        );
-                    }
-                } else {
-                    [$prefix,] = explode('_domain_model_', $foreignTableName, 2);
-                    /*
-                     * Set "MM_opposite_field" to indicate this M:N is mirrored by other TCA. To do so, we must determine if
-                     * we are currently on the child side of the relation, in which case our field name comes from the child
-                     * entity name, and comes from parent if the opposite is true.
-                     *
-                     * Important:
-                     * The option 'MM_opposite_field' will prevent the generation of the relation table by TYPO3.
-                     * Therefor the relation configuration must be done within the main record (parent) and the child record
-                     */
-                    // field or name
-                    $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']);
-                    if (!array_key_exists($columnNameLocal, $relatedModuleFields)) {
-                        $columnNameLocal = GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']);
-                    }
-                    if (!array_key_exists($columnNameLocal, $relatedModuleFields)) {
-                        throw new Exception(
-                            vsprintf(
-                                'Could not determine parent column %2$s nor %3$s for relation on column %1$s',
-                                [
-                                    $fieldName,
-                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['field']),
-                                    GeneralUtility::camelCaseToLowerCaseUnderscored($relationConfiguraton['name']),
-                                ]
-                            )
-                        );
-                    }
-                    $columnNameForeign = GeneralUtility::camelCaseToLowerCaseUnderscored($fieldName);
-                    $tca['MM_opposite_field'] = $columnNameLocal;
+                if ($fieldConfiguration['relation_state'] === 'foreign') {
+                    $tca['MM_opposite_field'] = $fieldConfiguration['field_local'];
                 }
 
+                [$prefix,] = explode('_domain_model_', $foreignTableName, 2);
                 $tca['MM'] = $this->buildRelationTableName(
                     $prefix,
-                    $columnNameLocal,
-                    $columnNameForeign
+                    $fieldConfiguration['field_local'],
+                    $fieldConfiguration['field_foreign']
                 );
                 $this->relationData[] = [
                     $fieldName,
@@ -1149,9 +1052,9 @@ TEMPLATE;
                     $fieldConfiguration['field'],
                     'm:n',
                     $isLocalColumn ? $currentTableName : $foreignTableName,
-                    $columnNameLocal,
+                    $fieldConfiguration['field_local'],
                     $isLocalColumn ? $foreignTableName : $currentTableName,
-                    $columnNameForeign,
+                    $fieldConfiguration['field_foreign'],
                     $tca['MM']
                 ];
 
@@ -1954,15 +1857,64 @@ TEMPLATE;
         }
         $moduleConfiguration = $module->getModuleConfiguration();
         $connectorConfiguration = $module->getConnectorConfiguration();
+        $fieldConfiguration = $moduleConfiguration['field_conf'] ?? [];
+        $relationConfiguration = $moduleConfiguration['relation_conf'] ?? [];
+        $fieldsToLoad = $connectorConfiguration['fieldsToLoad'] ?? [];
 
-        $this->moduleFieldConfigurationCache[$moduleName] = array_replace_recursive(
-            array_intersect_assoc(
-                $moduleConfiguration['field_conf'],
-                $connectorConfiguration['fieldsToLoad']
-            ),
-            $moduleConfiguration['relation_conf']
+        $fieldDefinitions = [];
+        // Basic setup of fields
+        foreach ($fieldsToLoad as $fieldName => $config) {
+            $fieldDefinitions[$fieldName] = $config;
+            if (empty($config)) {
+                $fieldDefinitions[$fieldName] = $fieldConfiguration[$fieldName] ?? [];
+            }
+        }
+
+        /*
+         * Create relation fields
+         *
+         * Naming convention for relation field names
+         *
+         * 1. if child and parent tables have the same name -> two fields
+         *    The main data set follows rule 2, the child data set follows rule 3
+         * 2. if parent table equals current table -> <fieldname>
+         * 3. if parent table differs from current table -> <parent>_<fieldname>
+         *
+         */
+        foreach ($relationConfiguration as $fieldName => $fieldConfig) {
+            // We are at the parent table
+            $selfReference = (string)$fieldConfig['parent'] === (string)$fieldConfig['child'];
+            $isParent = $fieldConfig['parent'] == $module->getModuleName();
+
+            $sourceField = (string)$fieldConfig['field'];
+            $addField = $selfReference || ($isParent && $sourceField === $fieldName) || (!$isParent && $sourceField !== $fieldName);
+            $fieldLocal = (string)$fieldConfig['field'];
+            $fieldForeign = (string)$fieldConfig['parent'] . '_' . (string)$fieldConfig['field'];
+
+            if ($addField) {
+                $parentRecord = $sourceField === $fieldName;
+                $fieldDefinitions[$fieldName] = [
+                    'type' => $fieldConfig['type'],
+                    'name' => $fieldConfig['name'],
+                    'field' => $fieldName,
+                    'parent' => $fieldConfig['parent'],
+                    'child' => $fieldConfig['child'],
+                    'field_local' => $fieldLocal,
+                    'field_foreign' => $fieldForeign,
+                    'relation_state' => $parentRecord ? 'local' : 'foreign',
+                    'relation_type' => $selfReference ? 'self' : 'connect',
+                ];
+            }
+        }
+
+        // Cleanup "ghost" fields
+        $fieldDefinitions = array_filter(
+            $fieldDefinitions,
+            fn (string $fieldName) => !empty($fieldDefinitions[$fieldName]),
+            ARRAY_FILTER_USE_KEY
         );
 
+        $this->moduleFieldConfigurationCache[$moduleName] = $fieldDefinitions;
         return $this->moduleFieldConfigurationCache[$moduleName];
     }
 }
