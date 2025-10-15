@@ -97,22 +97,25 @@ all dynamic-model-enabled modules' entities.
 |-------------------|-------------------------------------------------------------|
 | `entityClassName` | entityClassName                                             |
 
-| Option     | Description                                        |
-|------------|----------------------------------------------------|
-| `--strict` | Generates strict PHP code |
-| `--read-only`     | Generates TCA fields as read-only |
+| Option         | Description                       |
+|----------------|-----------------------------------|
+| `--strict`     | Generates strict PHP code         |
+| `--read-only`  | Generates TCA fields as read-only |
 
 ## Get module and connector configuration
 
 Gets the module and connector configuration for the module identified by $moduleName, and outputs it
 as JSON.
 
-**Usage:** `fourallportal:getConfiguration <moduleName> [<server>]`
+**Usage:** `fourallportal:getConfiguration [options] [--] <moduleName>`
 
 | Argument     | Description                                                    |
 |--------------|----------------------------------------------------------------|
 | `moduleName` | Name of module for which to get configuration                  |
-| `server`     | Optional UID of server, defaults to active server [default: 0] |
+
+| Options     | Description                                        | Default |
+|-------------|----------------------------------------------------|---------|
+| `--server`  | Optional UID of server, defaults to active server  | 0       |
 
 ## Initialize system
 
@@ -184,33 +187,33 @@ the provided README.md file for more information about this.
 
 Execute this to synchronise events from the PIM API
 
-**Usage:** `fourallportal:sync [options] [<module> [<exclude> [<maxEvents> [<maxTime> [<maxThreads>]]]]]`
+**Usage:** `fourallportal:sync [options] [--] [<module>]`
 
 | Argument     | Description                                                                                                                                                      |
 |--------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `module`     | If passed can be used to only sync one module, using the module or connector name it has in 4AP                                                                  |
-| `exclude`    | Exclude a list of modules from processing (CSV string module names)                                                                                              |
-| `maxEvents`  | Maximum number of events to process. Default is unlimited. Affects only the number of events being executed, if sync is enabled will still sync all [default: 0] |
-| `maxTime`    | Maximum number of seconds that the sync is allowed to run, once expired, will require a new execution to continue [default: 0]                                   |
-| `maxThreads` | Maximum number of concurrent threads which are allowed to execute events. Ignored if sync=true [default: 4]                                                      |
 
 
-| Options       | Description                                                                                          |
-|---------------|------------------------------------------------------------------------------------------------------|
-| `--sync`      | Sync events (starting from last received event). If execute=true will happen before executing        |
-| `--full-sync` | Trigger a full sync                                                                                  |
-| `--force`     | Forces the sync to run regardless of lock and will neither lock nor unlock the task  |
-| `--execute`   | If true, also executes events after receiving (syncing) events                                                                                 |
+| Options         | Description                                                                                                                                         | Default |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| `--sync`        | Sync events (starting from last received event). If execute=true will happen before executing                                                       |         |
+| `--full-sync`   | Trigger a full sync                                                                                                                                 |         |
+| `--force`       | Forces the sync to run regardless of lock and will neither lock nor unlock the task                                                                 |         |
+| `--execute`     | If true, also executes events after receiving (syncing) events                                                                                      |         |
+| `--exclude`     | Exclude a list of modules from processing (CSV string module names)                                                                                 |         |
+| `--max-events`  | Maximum number of events to process. Default is unlimited. Affects only the number of events being executed, if sync is enabled will still sync all | 0       |
+| `--max-time`    | Maximum number of seconds that the sync is allowed to run, once expired, will require a new execution to continue                                   | 0       |
+| `--max-threads` | Maximum number of concurrent threads which are allowed to execute events. Ignored if sync=true                                                      | 4       |
 
 ## Unlock sync
 
 Removes a (stale) lock.
 
-**Usage:** `fourallportal:unlock [<requiredAge>]`
+**Usage:** `fourallportal:unlock [options]`
 
-| Argument      | Description                                                                                          |
-|---------------|------------------------------------------------------------------------------------------------------|
-| `requiredAge` | Number of seconds, required minimum age of the lock file before removal will be allowed [default: 0] |
+| Options          | Description                                                                               | Default |
+|------------------|-------------------------------------------------------------------------------------------|---------|
+| `--required-age` | Number of seconds, required minimum age of the lock file before removal will be allowed   | 0       |
 
 ## Replay events
 
@@ -219,13 +222,16 @@ for the provided module named by connector or module name.
 
 By default, the command replays only the last event.
 
-**Usage:** `fourallportal:replay <module> [<events> [<objectId>]]`
+**Usage:** `fourallportal:replay [options] [--] <module>`
 
 | Argument   | Description           |
 |------------|-----------------------|
 | `module`   | Module name           |
-| `events`   | Event id [default: 1] |
-| `objectId` | Object Id             |
+
+| Options       | Description                      | Default |
+|---------------|----------------------------------|---------|
+| `--events`    | The amount of events to process  | 1       |
+| `--object-id` | The id of the object to replay   |         |
 
 ## Run tests
 
