@@ -44,7 +44,8 @@ Documentation and Guides
 
 10. [TCA Definitions File](./Documentation/setup.md#tca-definitions-file)
 11. [Scheduled Tasks](./Documentation/setup.md#scheduled-tasks)
-12. [Old Documentation (8.7)](./Documentation/oldDoccumentation.md)
+12. [Events](Documentation/events.md)
+13. [Old Documentation (8.7)](./Documentation/oldDoccumentation.md)
 
 Versions
 -----------------------------------------
