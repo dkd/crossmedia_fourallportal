@@ -1871,15 +1871,41 @@ TEMPLATE;
         }
 
         /*
-         * Create relation fields
+         * Notes about relation
          *
-         * Naming convention for relation field names
+         * All entries of the relation belongs to the current module.
+         * The array key refers to the field name of the current module.
          *
-         * 1. if child and parent tables have the same name -> two fields
-         *    The main data set follows rule 2, the child data set follows rule 3
-         * 2. if parent table equals current table -> <fieldname>
-         * 3. if parent table differs from current table -> <parent>_<fieldname>
+         * The relation structure contains following fields that are used to calculate and associate the
+         * relation information for TYPO3:
          *
+         * - parent: Module name of the parent module
+         * - child: Module name of the child module
+         * - field: The field name to connect
+         * - type: The type of relation
+         *
+         * The field relates to the parent module.
+         *
+         * In order to setup the TCA as easy as possible, some preparation for additional information are done:
+         *
+         *  1. Adding information if the relation reffered to the same module
+         *  2. Adding the information if the column is the parent (local) or child (foreign) for the relation
+         *  3. Adding the name of the local field
+         *  4. Adding the name of the foreign field
+         *
+         * Syntax for the local field:
+         * `<fieldname>` = `<field>`
+         *
+         * Syntax for the foreign field:
+         * `<fieldname>` = `<parent>_<field>`
+         *
+         * Finally these information along with the column are added if:
+         *
+         *  1. it's a self-relation
+         *  2. the current module equals <parent> and the current field name matches <field>
+         *     The match of the field name it self wouldn't work this the field name is not unique threout
+         *     all modules
+         *  3. the current module not equals <parent> and the current field name not matches <field>
          */
         foreach ($relationConfiguration as $fieldName => $fieldConfig) {
             // We are at the parent table
@@ -1907,7 +1933,14 @@ TEMPLATE;
             }
         }
 
-        // Cleanup "ghost" fields
+        /*
+         * Cleanup "orphaned" fields
+         *
+         * The relation is connected to the field list by it's name within the list
+         * The name of the relation does not have to match the fields that where added to the final list of fields.
+         *
+         * In order to keep only the fields that have to be processed, empty records are dropped.
+         */
         $fieldDefinitions = array_filter(
             $fieldDefinitions,
             fn (string $fieldName) => !empty($fieldDefinitions[$fieldName]),
