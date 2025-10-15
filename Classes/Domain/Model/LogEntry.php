@@ -2,13 +2,15 @@
 
 namespace Crossmedia\Fourallportal\Domain\Model;
 
+use TYPO3\CMS\Core\Log\LogLevel;
+
 class LogEntry
 {
   protected string $date = '';
-  protected int $severity = 0; // INFO
+  protected string $severity = LogLevel::INFO; // INFO
   protected string $message = '';
 
-  public function __construct(string $date, int $severity, string $message)
+  public function __construct(string $date, string $severity, string $message)
   {
     $this->date = $date;
     $this->severity = $severity;
@@ -20,7 +22,7 @@ class LogEntry
     return $this->date;
   }
 
-  public function getSeverity(): int
+  public function getSeverity(): string
   {
     return $this->severity;
   }
@@ -33,7 +35,7 @@ class LogEntry
   public function getSeverityClassName(): string
   {
     return match ($this->severity) {
-      4, 3, 2 => 'danger',
+      LogLevel::CRITICAL, LogLevel::ERROR, LogLevel::WARNING => 'danger',
       default => 'default',
     };
   }

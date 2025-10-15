@@ -21,6 +21,7 @@ use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationPathDoesNotExis
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Locking\Exception\LockCreateException;
+use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Persistence\Exception\IllegalObjectTypeException;
@@ -197,7 +198,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
             $module->getConfigHash(),
             $module->getModuleName()
           ),
-          4 /* GeneralUtility::SYSLOG_SEVERITY_FATAL */
+            LogLevel::CRITICAL
         );
         continue;
       }
@@ -290,7 +291,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
           $module->getConnectorConfiguration()['config_hash'],
           $module->getConfigHash()
         );
-        $this->loggingService->logSchemaActivity($message, 4 /* GeneralUtility::SYSLOG_SEVERITY_FATAL */);
+        $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
         $parameters->excludeModule($module->getModuleName());
         continue;
       }
@@ -614,7 +615,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         $event->setRetries(0);
         $event->setStatus('failed');
       }
-      $this->loggingService->logEventActivity($event, 'Event was deferred', 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
+      $this->loggingService->logEventActivity($event, 'Event was deferred', LogLevel::WARNING);
     } catch (\Throwable $exception) {
       $event->setStatus('failed');
       $event->setRetries(0);
@@ -623,7 +624,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
       }
 
-      $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
+      $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), LogLevel::WARNING);
       $this->eventRepository->update($event);
       try {
         $this->persistenceManager->persistAll();
@@ -653,7 +654,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     try {
       $this->persistenceManager->persistAll();
     } catch (Exception $exception) {
-      $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), 2 /* GeneralUtility::SYSLOG_SEVERITY_WARNING */);
+      $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), LogLevel::WARNING);
       throw $exception;
     }
     $parameters?->countExecutedEvent();

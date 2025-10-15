@@ -6,12 +6,13 @@ use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\LogEntry;
 use Crossmedia\Fourallportal\Utility\ConstantsUtility;
 use TYPO3\CMS\Core\Core\Environment;
+use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class LoggingService implements SingletonInterface
 {
-  public function logFileTransferActivity(string $url, string $localFileName, int $severity = 1/** GeneralUtility::SYSLOG_SEVERITY_INFO */): void
+  public function logFileTransferActivity(string $url, string $localFileName, string $severity = LogLevel::INFO): void
   {
     $logFile = $this->resolveLogFilePath(ConstantsUtility::TEXT_FILE);
     $this->writeEntry($logFile, $url . ' ' . $localFileName, $severity);
@@ -27,7 +28,7 @@ class LoggingService implements SingletonInterface
     return $this->getEntries($logFile, $numberOfEntries);
   }
 
-  public function logConnectionActivity(string $message, int $severity = 1/** GeneralUtility::SYSLOG_SEVERITY_INFO */): void
+  public function logConnectionActivity(string $message, string $severity = LogLevel::INFO): void
   {
     $logFile = $this->resolveLogFilePath(ConstantsUtility::TEXT_CONNECTION);
     $this->writeEntry($logFile, $message, $severity);
@@ -43,7 +44,7 @@ class LoggingService implements SingletonInterface
     return $this->getEntries($logFile, $numberOfEntries);
   }
 
-  public function logEventActivity(Event $event, string $message, int $severity = 1/** GeneralUtility::SYSLOG_SEVERITY_INFO */): void
+  public function logEventActivity(Event $event, string $message, string $severity = LogLevel::INFO): void
   {
     $logFile = $this->resolveLogFilePath(ConstantsUtility::TEXT_EVENT, $event->getEventId());
     $this->writeEntry($logFile, $message, $severity);
@@ -60,7 +61,7 @@ class LoggingService implements SingletonInterface
     return $this->getEntries($logFile, $numberOfEntries);
   }
 
-  public function logObjectActivity(string $uuid, string $message, string $property, int $severity = 1/** GeneralUtility::SYSLOG_SEVERITY_INFO */): void
+  public function logObjectActivity(string $uuid, string $message, string $property, string $severity = LogLevel::INFO): void
   {
     $logFile = $this->resolveLogFilePath(ConstantsUtility::TEXT_OBJECT, $uuid);
     $this->writeEntry($logFile, $property . ' ' . $message, $severity);
@@ -77,7 +78,7 @@ class LoggingService implements SingletonInterface
     return $this->getEntries($logFile, $numberOfEntries);
   }
 
-  public function logSchemaActivity(string $message, int $severity = 1/** GeneralUtility::SYSLOG_SEVERITY_INFO */): void
+  public function logSchemaActivity(string $message, string $severity = LogLevel::INFO): void
   {
     $logFile = $this->resolveLogFilePath(ConstantsUtility::TEXT_SCHEMA);
     $this->writeEntry($logFile, $message, $severity);
@@ -123,13 +124,13 @@ class LoggingService implements SingletonInterface
     foreach (array_reverse($entries) as $entry) {
       [$date, $severity, $message] = explode(' ', $entry, 3) + [null, null, null];
       if ($date && $severity && $message) {
-        $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, (int)$severity, (string)$message);
+        $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, $severity, (string)$message);
       }
     }
     return $items;
   }
 
-  protected function writeEntry(string $logFile, string $message, int $severity): void
+  protected function writeEntry(string $logFile, string $message, string $severity = LogLevel::INFO): void
   {
     if (empty($message)) {
       // Cowardly refusing to create an empty log message
@@ -138,11 +139,12 @@ class LoggingService implements SingletonInterface
     $fp = fopen($logFile, 'a+');
     // FIXME: $fp should not return boolean !!
     if ($fp !== false) {
+      $validLogLevels = LogLevel::atLeast(LogLevel::WARNING);
       fwrite($fp, date('Y-m-d_H:i:s') . ' ' . $severity . ' ' . $message . PHP_EOL);
       fclose($fp);
-      if ($severity >= 2/** GeneralUtility::SYSLOG_SEVERITY_WARNING */) {
+      if (in_array($severity, $validLogLevels)) {
         $fp = fopen($this->resolveLogFilePath(ConstantsUtility::TEXT_ERRORS), 'a+');
-        fwrite($fp, date('Y-m-d_H:i:s') . ' ' . $severity . ' ' . $message . PHP_EOL);
+        fwrite($fp, date('Y-m-d_H:i:s') . ' ' . LogLevel::normalizeLevel($severity) . ' ' . $message . PHP_EOL);
         fclose($fp);
       }
     }

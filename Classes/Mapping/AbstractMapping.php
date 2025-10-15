@@ -22,6 +22,7 @@ use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
 use TYPO3\CMS\Core\DataHandling\DataHandler;
 use TYPO3\CMS\Core\Domain\Repository\PageRepository;
+use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\TypoScript\FrontendTypoScript;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -336,10 +337,10 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                 }
             } catch (PropertyNotAccessibleException $error) {
                 $message = 'Error mapping ' . $module->getModuleName() . ':' . $objectId . ':' . $importedName . ' - ' . $error->getMessage();
-                $this->loggingService->logObjectActivity($data['result'][0]['id'], $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
+                $this->loggingService->logObjectActivity($data['result'][0]['id'], $message, LogLevel::ERROR);
             } catch (DeferralException $error) {
                 $message = 'Error mapping ' . $module->getModuleName() . ':' . $objectId . ':' . $importedName . ' - ' . $error->getMessage();
-                $this->loggingService->logObjectActivity($data['result'][0]['id'], $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
+                $this->loggingService->logObjectActivity($data['result'][0]['id'], $message, LogLevel::ERROR);
             }
         }
         return $mappingProblemsOccurred;
@@ -445,7 +446,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                         $child = $typeConverter->convertFrom($identifier, $childType, [], $configuration);
                     } catch (DeferralException $error) {
                         $this->logger?->error($error->getMessage());
-                        $this->loggingService->logObjectActivity($objectId, $error->getMessage(), 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
+                        $this->loggingService->logObjectActivity($objectId, $error->getMessage(), LogLevel::ERROR);
                         $mappingProblemsOccurred = true;
                         continue;
                     } catch (\Throwable $throwable) {
@@ -486,7 +487,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                             ]
                         );
                         $this->logger?->warning($message);
-                        $this->loggingService->logObjectActivity($objectId, $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
+                        $this->loggingService->logObjectActivity($objectId, $message, LogLevel::ERROR);
                         $child = null;
                     }
 
@@ -504,7 +505,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                         );
 
                         $this->logger?->error($message);
-                        $this->loggingService->logObjectActivity($objectId, $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
+                        $this->loggingService->logObjectActivity($objectId, $message, LogLevel::ERROR);
                         $mappingProblemsOccurred = true;
                         continue;
                     }
@@ -557,7 +558,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     // We therefore need to check this, log the problem, and skip the property.
                     $message = 'Mapping error when mapping property ' . $propertyName . ' on ' . get_class($object) . ':' . $objectId . ': ' . $propertyValue->getMessage();
                     $this->logger?->warning($message);
-                    $this->loggingService->logObjectActivity($objectId, $message, 3 /*GeneralUtility::SYSLOG_SEVERITY_WARNING*/);
+                    $this->loggingService->logObjectActivity($objectId, $message, LogLevel::ERROR);
                     $propertyValue = null;
                 }
 
@@ -576,7 +577,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                 method_exists($object, 'getRemoteId') ? $object->getRemoteId() : $object->getUid()
             );
             $this->logger?->error($message);
-            $this->loggingService->logObjectActivity($objectId, $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_FATAL*/);
+            $this->loggingService->logObjectActivity($objectId, $message, LogLevel::CRITICAL);
             return false;
         }
 
@@ -1012,7 +1013,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     $data['result'][0]['id'],
                     'Dimension mapping ' . $translationDimensionMapping->getUid() . ' is configured to not use dimensions, skipping translated version!',
                     'sys_language_uid',
-                    1 //GeneralUtility::SYSLOG_SEVERITY_INFO
+                    LogLevel::INFO
                 );
                 continue;
             }

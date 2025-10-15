@@ -8,6 +8,7 @@ use Crossmedia\Fourallportal\Error\ApiTimeOutException;
 use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationExtensionNotConfiguredException;
 use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationPathDoesNotExistException;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
+use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class ApiClient
@@ -62,7 +63,7 @@ class ApiClient
             $this->loggingService->logConnectionActivity('login, session ID: ' . $this->sessionId);
             return $this->sessionId;
         }
-        $this->loggingService->logConnectionActivity('login FAILED', 4 /*4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+        $this->loggingService->logConnectionActivity('login FAILED', LogLevel::CRITICAL);
         return false;
     }
 
@@ -191,7 +192,7 @@ class ApiClient
 
         if (!empty($curlError = curl_error($ch))) {
             $message = 'CURL Failed with the Error: ' . $curlError;
-            $this->loggingService->logFileTransferActivity($uri, $temporaryFilename . ': ' . $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+            $this->loggingService->logFileTransferActivity($uri, $temporaryFilename . ': ' . $message, LogLevel::CRITICAL);
             if (str_contains($curlError, 'Operation timed out')) {
                 throw new ApiTimeOutException(
                     $curlError,
@@ -203,7 +204,7 @@ class ApiClient
 
         if ($info['http_code'] !== 200) {
             $errorMessage = sprintf('CURL response code was %d when fetching "%s": ', $info['http_code'], $uri);
-            $this->loggingService->logFileTransferActivity($uri, $temporaryFilename, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+            $this->loggingService->logFileTransferActivity($uri, $temporaryFilename, LogLevel::CRITICAL);
             throw new \TYPO3\CMS\Core\Exception($errorMessage, 3106733633);
         }
 
@@ -213,7 +214,7 @@ class ApiClient
         if ($expectedFileSize > 0 && $expectedFileSize != filesize($temporaryFilename)) {
             unlink($temporaryFilename);
             $message = 'The downloaded file does not match the expected filesize';
-            $this->loggingService->logFileTransferActivity($uri, $temporaryFilename . ': ' . $message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+            $this->loggingService->logFileTransferActivity($uri, $temporaryFilename . ': ' . $message, LogLevel::CRITICAL);
             throw new ApiException($message, 2780611060);
         }
 
@@ -272,7 +273,7 @@ class ApiClient
                 return $response['result'];
             default:
                 $message = $response['code'] . ': ' . $response['message'];
-                $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+                $this->loggingService->logConnectionActivity($message, LogLevel::CRITICAL);
                 throw new ApiException($message, 4181110095);
         }
     }
@@ -308,7 +309,7 @@ class ApiClient
         );
 
         if (!isset($beans['result'][0])) {
-            $this->loggingService->logConnectionActivity('Bean data request returned no results. Response: ' . json_encode($beans), 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+            $this->loggingService->logConnectionActivity('Bean data request returned no results. Response: ' . json_encode($beans), LogLevel::CRITICAL);
             throw new ApiException('Bean data request returned no results. Response: ' . json_encode($beans), 1525694885);
         }
 
@@ -404,12 +405,12 @@ class ApiClient
     {
         if (!is_array($result)) {
             $message = 'The MAM API returned garbage data. Expected JSON array, got "' . gettype($result) . '"';
-            $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+            $this->loggingService->logConnectionActivity($message, LogLevel::CRITICAL);
             throw new ApiException($message, 9802312867);
         }
         if (!isset($result['code']) || (int)($result['code'] ?? -1) != 0) {
             $message = $result['message'] ?? 'MamClient: could not communicate with mam api. please try again later';
-            $this->loggingService->logConnectionActivity($message, 4 /*GeneralUtility::SYSLOG_SEVERITY_ERROR*/);
+            $this->loggingService->logConnectionActivity($message, LogLevel::CRITICAL);
             throw new ApiException($message . ' - Response code ' . ($result['code'] ?? 'N/A') . ': ' . $this->translateResponseCode((int)($result['code'] ?? -1)), 8133411903);
         }
     }
