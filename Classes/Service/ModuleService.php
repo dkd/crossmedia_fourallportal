@@ -4,11 +4,13 @@ namespace Crossmedia\Fourallportal\Service;
 
 use Crossmedia\Fourallportal\Domain\Model\Module;
 use Crossmedia\Fourallportal\Domain\Repository\ModuleRepository;
+use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 
 class ModuleService
 {
     public function __construct(
-        protected ModuleRepository $moduleRepository
+        protected ModuleRepository $moduleRepository,
+        protected PersistenceManager $persistenceManager,
     ) {
     }
 
@@ -58,5 +60,18 @@ class ModuleService
         } catch (\Throwable $e) {
         }
         return $tableRows;
+    }
+
+    /**
+     * Pin all schemas
+     */
+    public function pinSchemas(): void
+    {
+        foreach ($this->moduleRepository->findAll() as $module) {
+            if ($module->getServer()->isActive()) {
+                $module->pinSchemaVersion();
+            }
+        }
+        $this->persistenceManager->persistAll();
     }
 }

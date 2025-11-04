@@ -2,12 +2,11 @@
 
 namespace Crossmedia\Fourallportal\Command;
 
-use Crossmedia\Fourallportal\Domain\Repository\ModuleRepository;
+use Crossmedia\Fourallportal\Service\ModuleService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 
 #[AsCommand(
     name: 'fourallportal:pinschema',
@@ -16,8 +15,7 @@ use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 class PinSchemaCommand extends Command
 {
     public function __construct(
-        protected ?ModuleRepository   $moduleRepository = null,
-        protected ?PersistenceManager $persistenceManager = null,
+        protected ModuleService $moduleService
     ) {
         parent::__construct();
     }
@@ -41,12 +39,7 @@ DESCRIPTION
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        foreach ($this->moduleRepository->findAll() as $module) {
-            if ($module->getServer()->isActive()) {
-                $module->pinSchemaVersion();
-            }
-        }
-        $this->persistenceManager->persistAll();
+        $this->moduleService->pinSchemas();
         return Command::SUCCESS;
     }
 }
