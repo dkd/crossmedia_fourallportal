@@ -172,7 +172,6 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       $deferredEvents[$event->getModule()->getModuleName()][$event->getObjectId()][] = $event;
     }
     if ($fullSync && !$module && empty($exclude)) {
-//      $GLOBALS['TYPO3_DB']->exec_TRUNCATEquery('tx_fourallportal_domain_model_event');
       $tableName = "tx_fourallportal_domain_model_event";
       $connection = $this->connectionPool->getQueryBuilderForTable($tableName)->getConnection();
       $dbPlatform = $connection->getDatabasePlatform();
@@ -191,15 +190,14 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
 
     foreach ($activeModules as $module) {
       if (!$module->verifySchemaVersion()) {
-        $this->loggingService->logSchemaActivity(
-          sprintf(
-            'Remote config hash "%s" does not match local "%s" - skipping SYNC of module "%s"',
+        $message = sprintf(
+            'Module "%s": Remote config hash "%s" does not match local "%s" - skipping SYNC',
+            $module->getModuleName(),
             $module->getConnectorConfiguration()['config_hash'],
-            $module->getConfigHash(),
-            $module->getModuleName()
-          ),
-            LogLevel::CRITICAL
+            $module->getConfigHash()
         );
+        $this->response->error($message);
+        $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
         continue;
       }
 
@@ -287,10 +285,12 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     foreach ($activeModules as $module) {
       if (!$module->verifySchemaVersion()) {
         $message = sprintf(
-          'Remote config hash "%s" does not match local "%s"',
+          'Module "%s": Remote config hash "%s" does not match local "%s"',
+          $module->getModuleName(),
           $module->getConnectorConfiguration()['config_hash'],
           $module->getConfigHash()
         );
+        $this->response->error($message);
         $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
         $parameters->excludeModule($module->getModuleName());
         continue;
