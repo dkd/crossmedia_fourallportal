@@ -201,14 +201,12 @@ TEMPLATE;
     public function enableReadOnly(): self
     {
         $this->readOnly = true;
-        $this->dynamicModelGenerator->enableReadOnly();
         return $this;
     }
 
     public function disableReadOnly(): self
     {
         $this->readOnly = false;
-        $this->dynamicModelGenerator->disableReadOnly();
         return $this;
     }
 
