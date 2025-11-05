@@ -18,6 +18,33 @@ class ModuleService
     }
 
     /**
+     * Check if there are modules available to be checked
+     *
+     * @return bool
+     */
+    public function modulesAvailable(int|null $serverUid = null): bool
+    {
+        $result = false;
+
+        try {
+            foreach ($this->getServers($serverUid) as $server) {
+                /** @var Server $server */
+                if (!($server instanceof Server)) {
+                    continue;
+                }
+                foreach ($server->getModules() as $module) {
+                    $result = true;
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return $result;
+    }
+
+    /**
      * Validate all module hashes
      *
      * @return bool
