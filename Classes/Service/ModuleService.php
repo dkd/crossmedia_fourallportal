@@ -33,7 +33,6 @@ class ModuleService
                     continue;
                 }
                 foreach ($server->getModules() as $module) {
-                    print $module->getModuleName() . PHP_EOL;
                     /** @var Module $module*/
                     if (!$module->verifySchemaVersion()) {
                         $result = false;
