@@ -2,25 +2,13 @@
 
 namespace Crossmedia\Fourallportal\Command;
 
-use Crossmedia\Fourallportal\Domain\Model\Module;
-use Crossmedia\Fourallportal\Domain\Model\Server;
-use Crossmedia\Fourallportal\Domain\Repository\ModuleRepository;
-use Crossmedia\Fourallportal\Domain\Repository\ServerRepository;
-use Exception;
+use Crossmedia\Fourallportal\Service\InitialisationService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationExtensionNotConfiguredException;
-use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationPathDoesNotExistException;
-use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
-use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Extbase\Persistence\Exception\IllegalObjectTypeException;
-use TYPO3\CMS\Extbase\Persistence\Exception\UnknownObjectException;
-use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 
 #[AsCommand(
     name: 'fourallportal:initialize',
@@ -29,9 +17,7 @@ use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 class InitializeCommand extends Command
 {
     public function __construct(
-        protected ?ModuleRepository   $moduleRepository = null,
-        protected ?PersistenceManager $persistenceManager = null,
-        protected ?ServerRepository   $serverRepository = null,
+        protected readonly InitialisationService $initialisationService,
     ) {
         parent::__construct();
     }
@@ -86,139 +72,13 @@ DESCRIPTION)
         $io = new SymfonyStyle($input, $output);
         $io->title($this->getDescription());
         $fail = (bool)($input->hasOption('fail') && $input->getOption('fail'));
-
-        // Retrieve whole configuration
-        $settings = GeneralUtility::makeInstance(ExtensionConfiguration::class)->get('fourallportal');
-        if (isset($settings['servers'])) {
-            foreach ($settings['servers'] as $server) {
-                $currentServer = $this->serverRepository->findOneBy(['domain' => $server['domain']]);
-                if (!$currentServer) {
-                    $content .= 'Creating new server for ' . $server['domain'] . PHP_EOL;
-                    $currentServer = new Server();
-                    $this->serverRepository->add($currentServer);
-                } else {
-                    $content .= 'Updating configuration for ' . $server['domain'] . PHP_EOL;
-                    $this->serverRepository->update($currentServer);
-                }
-
-                if ($server['username']) {
-                    $currentServer->setUsername($server['username']);
-                    $content .= '* Username: ' . $server['username'] . PHP_EOL;
-                }
-
-                if ($server['password']) {
-                    $currentServer->setPassword($server['password']);
-                    $content .= '* Password: ' . $server['password'] . PHP_EOL;
-                }
-
-                $currentServer->setActive((bool)$server['active']);
-                $content .= '* Active: ' . $server['active'] . PHP_EOL;
-
-                $currentServer->setCustomerName($server['customerName']);
-                $content .= '* Customer name: ' . $server['customerName'] . PHP_EOL;
-
-                $currentServer->setDomain($server['domain']);
-
-                $content .= '* Testing connectivity... ';
-                $io->write($content);
-                $content = '';
-
-                try {
-                    $currentServer->getClient()->login();
-                    $content .= 'OKAY!';
-                } catch (Exception $error) {
-                    $content .= 'ERROR! ' . $error->getMessage();
-                    if ($fail) {
-                        $io->write($content);
-                        return Command::FAILURE;
-                    }
-                }
-                $content .= PHP_EOL;
-
-                foreach ($server['modules'] as $moduleName => $moduleProperties) {
-                    $module = $this->ensureServerHasModule($content, $currentServer, $moduleName, $moduleProperties);
-                    $module->setServer($currentServer);
-
-                    $content .= '* Testing connectivity... ';
-                    $io->write($content);
-                    $content = '';
-
-                    try {
-                        $module->getModuleConfiguration();
-                        $content .= 'OKAY!';
-                    } catch (Exception $error) {
-                        $content .= 'ERROR! ' . $error->getMessage();
-                        if ($fail) {
-                            $io->write($content);
-                            return Command::FAILURE;
-                        }
-                    }
-                    $content .= PHP_EOL;
-                }
-            }
+        $result = Command::SUCCESS;
+        try {
+            $this->initialisationService->createFromVars($fail);
+        } catch (\Throwable $e) {
+            $result = Command::FAILURE;
         }
-        $this->persistenceManager->persistAll();
-        return Command::SUCCESS;
-    }
-
-    /**
-     * @param string $content
-     * @param Server $server
-     * @param string $moduleName
-     * @param array $moduleProperties
-     * @return Module
-     * @throws IllegalObjectTypeException
-     * @throws UnknownObjectException
-     */
-    protected function ensureServerHasModule(string $content, Server $server, $moduleName, array $moduleProperties)
-    {
-        $currentModule = new Module();
-        $foundModule = false;
-        foreach ($server->getModules() as $module) {
-            if ($module->getModuleName() === $moduleName) {
-                $foundModule = true;
-                $currentModule = $module;
-                break;
-            }
-        }
-        if (!$foundModule) {
-            $content .= 'Adding new module for ' . $moduleName . PHP_EOL;
-        } else {
-            $content .= 'Updating existing module configuration for ' . $moduleName . PHP_EOL;
-        }
-
-        $currentModule->setModuleName($moduleName);
-
-        $currentModule->setConnectorName($moduleProperties['connectorName']);
-        $content .= '* Connector name: ' . $moduleProperties['connectorName'] . PHP_EOL;
-
-        $currentModule->setMappingClass($moduleProperties['mappingClass']);
-        $content .= '* Mapping class: ' . $moduleProperties['mappingClass'] . PHP_EOL;
-
-        $currentModule->setEnableDynamicModel($moduleProperties['enableDynamicModel'] ?? false);
-        $content .= '* Dynamic: ' . $moduleProperties['enableDynamicModel'] . PHP_EOL;
-
-        if ($moduleProperties['shellPath'] ?? false) {
-            $currentModule->setShellPath($moduleProperties['shellPath']);
-            $content .= '* Shell path: ' . $moduleProperties['shellPath'] . PHP_EOL;
-        }
-
-        if ($moduleProperties['falStorage'] ?? false) {
-            $currentModule->setFalStorage((int)$moduleProperties['falStorage']);
-            $content .= '* FAL storage: ' . $moduleProperties['falStorage'] . PHP_EOL;
-        }
-
-        if ($moduleProperties['storagePid'] ?? false) {
-            $currentModule->setStoragePid((int)$moduleProperties['storagePid']);
-            $content .= '* Storage PID: ' . $moduleProperties['storagePid'] . PHP_EOL;
-        }
-
-        if ($currentModule->getUid()) {
-            $this->moduleRepository->update($currentModule);
-        } else {
-            $this->moduleRepository->add($currentModule);
-            $server->getModules()->attach($currentModule);
-        }
-        return $currentModule;
+        $io->writeln($this->initialisationService->getLog());
+        return $result;
     }
 }
