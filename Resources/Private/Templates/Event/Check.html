@@ -5,36 +5,20 @@
 
 <f:layout name="Module"/>
 <f:section name="Content">
-  <f:section name="module-headline">
-    <h3>Event history, object
+    <h1>Event history, object
       <f:link.action action="index" arguments="{search: event.objectId, status: 'all'}">
         {event.objectId}
       </f:link.action>
-    </h3>
-  </f:section>
+    </h1>
   <f:flashMessages/>
 
   <f:if condition="{deletedScheduled}">
     <f:then>
-      <div class="alert alert-warning">
-        <h3 class="alert-title">
-          Object will be deleted
-        </h3>
-        <div class="alert-body">
-          There is a pending delete event for the object. You may not be able to
-        </div>
-      </div>
+			<f:be.infobox title="Object will be deleted" state="1">There is a pending delete event for the object. You may not be able to</f:be.infobox>
     </f:then>
     <f:else if="{deleted}">
-      <div class="alert alert-danger">
-        <h3 class="alert-title">
-          Object is deleted
-        </h3>
-        <div class="alert-body">
-          The object has been deleted from the PIM system. You will no longer be able to query
-          data for this object or replay previous events.
-        </div>
-      </div>
+			<f:be.infobox title="Object is deleted" state="2">The object has been deleted from the PIM system. You will no longer be able to query
+				data for this object or replay previous events.</f:be.infobox>
     </f:else>
   </f:if>
 	<f:link.action
