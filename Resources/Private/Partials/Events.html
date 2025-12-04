@@ -34,18 +34,19 @@
 </table>
 
 <f:section name="EventRow">
-  <tr class="{f:if(condition: '{highlightEvent.uid} == {event.uid}', then: 'text-primary')}">
-    <td>{event.eventId}</td>
-    <td>
+	<f:variable name="highlightClass" value="{f:if(condition: '{highlightEvent.uid} == {event.uid}', then: 'text-primary')}"/>
+  <tr>
+    <td class="{highlightClass}">{event.eventId}</td>
+    <td class="{highlightClass}">
       <f:format.date format="H:i:s d.m.Y">{event.crdate}</f:format.date>
     </td>
-    <td>
+    <td class="{highlightClass}">
       <f:format.date format="H:i:s d.m.Y">{event.tstamp}</f:format.date>
     </td>
-    <td>{event.module.connectorName}</td>
-    <td>{event.status}</td>
-    <td>{event.eventType}</td>
-    <td>{event.objectId}</td>
+    <td class="{highlightClass}">{event.module.connectorName}</td>
+    <td class="{highlightClass}">{event.status}</td>
+    <td class="{highlightClass}">{event.eventType}</td>
+    <td class="{highlightClass}">{event.objectId}</td>
     <td nowrap="nowrap" class="col-control">
 
       <div class="btn-group" role="group">

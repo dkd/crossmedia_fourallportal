@@ -8,9 +8,9 @@
 			</tr>
 			</thead>
 			<f:for each="{log}" as="logEntry">
-				<tr class="text-{logEntry.severityClassName}">
-					<td>{logEntry.date}</td>
-					<td>{logEntry.message}</td>
+				<tr>
+					<td class="text-{logEntry.severityClassName}">{logEntry.date}</td>
+					<td class="text-{logEntry.severityClassName}">{logEntry.message}</td>
 				</tr>
 			</f:for>
 		</table>
