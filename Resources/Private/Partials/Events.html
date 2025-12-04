@@ -22,7 +22,7 @@
         <f:render section="EventRow" arguments="{_all}"/>
       </f:for>
       <!-- Render your paging -->
-      <f:render partial="Pagination" arguments="{pagination: pagination, paginator: paginator, actionName: 'index'}"/>
+      <f:render partial="Pagination" arguments="{pagination: pagination, paginator: paginator, actionName: 'index', status: status}"/>
     </f:then>
     <f:else>
       <f:for each="{events}" as="event">

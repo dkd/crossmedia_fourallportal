@@ -49,26 +49,26 @@
 </style>
 <ul class="f3-widget-paginator">
   <li class="first">
-    <a class="{f:if(condition: '{pagination.previousPageNumber} && {pagination.previousPageNumber} >= {pagination.firstPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: 1})}" title="<<"><<</a>
+    <a class="{f:if(condition: '{pagination.previousPageNumber} && {pagination.previousPageNumber} >= {pagination.firstPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: 1, status: status})}" title="<<"><<</a>
   </li>
   <li class="previous">
-    <a class="{f:if(condition: '{pagination.previousPageNumber} && {pagination.previousPageNumber} >= {pagination.firstPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: pagination.previousPageNumber})}" title="<"><</a>
+    <a class="{f:if(condition: '{pagination.previousPageNumber} && {pagination.previousPageNumber} >= {pagination.firstPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: pagination.previousPageNumber, status: status})}" title="<"><</a>
   </li>
   <li class="{f:if(condition: '{pagination.hasLessPages}', then:'pagination-btn-inactive', else: 'pagination-btn-transparent')}">
     <f:if condition="{pagination.hasLessPages}">…</f:if>
   </li>
   <f:for each="{pagination.allPageNumbers}" as="page">
     <li>
-      <a class="pagination-btn {f:if(condition: '{page} == {paginator.currentPageNumber}', then:'current')}"  href="{f:uri.action(action:actionName, arguments:{currentPage: page})}">{page}</a>
+      <a class="pagination-btn {f:if(condition: '{page} == {paginator.currentPageNumber}', then:'current')}"  href="{f:uri.action(action:actionName, arguments:{currentPage: page, status: status})}">{page}</a>
     </li>
   </f:for>
   <li class="{f:if(condition: '{pagination.hasMorePages}', then:'pagination-btn-inactive', else: 'pagination-btn-transparent')}">
     <f:if condition="{pagination.hasMorePages}">…</f:if>
   </li>
   <li class="next">
-    <a class="{f:if(condition: '{pagination.nextPageNumber} && {pagination.nextPageNumber} <= {pagination.lastPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: pagination.nextPageNumber})}" title=">">></a>
+    <a class="{f:if(condition: '{pagination.nextPageNumber} && {pagination.nextPageNumber} <= {pagination.lastPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: pagination.nextPageNumber, status: status})}" title=">">></a>
   </li>
   <li class="last">
-    <a class="{f:if(condition: '{pagination.nextPageNumber} && {pagination.nextPageNumber} <= {pagination.lastPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: pagination.lastPageNumber})}" title=">>">>></a>
+    <a class="{f:if(condition: '{pagination.nextPageNumber} && {pagination.nextPageNumber} <= {pagination.lastPageNumber}', then:'pagination-btn', else: 'pagination-btn-inactive')}" href="{f:uri.action(action:actionName, arguments:{currentPage: pagination.lastPageNumber, status: status})}" title=">>">>></a>
   </li>
 </ul>
