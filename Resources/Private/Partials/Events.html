@@ -15,7 +15,7 @@
   </thead>
   <tbody>
 
-  <f:if condition="{pagination && paginator}">
+  <f:if condition="{pagination} && {paginator}">
     <f:then>
       <!-- Render your items listing -->
       <f:for each="{paginator.paginatedItems}" as="event" iteration="iterator">
