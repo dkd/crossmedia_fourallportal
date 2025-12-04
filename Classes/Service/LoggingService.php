@@ -9,6 +9,7 @@ use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Utility\MathUtility;
 
 class LoggingService implements SingletonInterface
 {
@@ -123,6 +124,16 @@ class LoggingService implements SingletonInterface
     $items = [];
     foreach (array_reverse($entries) as $entry) {
       [$date, $severity, $message] = explode(' ', $entry, 3) + [null, null, null];
+      // Compatibility for old log levels
+      if (MathUtility::canBeInterpretedAsInteger($severity)) {
+        $severity = match((int)$severity) {
+            4 => LogLevel::CRITICAL,
+            3 => LogLevel::ERROR,
+            2 => LogLevel::WARNING,
+            default => LogLevel::INFO,
+        };
+      }
+
       if ($date && $severity && $message) {
         $items[] = GeneralUtility::makeInstance(LogEntry::class, $date, $severity, (string)$message);
       }
