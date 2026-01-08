@@ -228,7 +228,7 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
       ->setMaxResults(1)
       ->executeQuery()
       ->fetchAllAssociative();
-    if ($translation === false) {
+    if (empty($translation)) {
         return $uid;
     } else {
         return (int)$translation[0]['uid'];
