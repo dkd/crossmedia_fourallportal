@@ -7,6 +7,7 @@ use Crossmedia\Fourallportal\Domain\Model\LogEntry;
 use Crossmedia\Fourallportal\Utility\ConstantsUtility;
 use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Log\LogLevel;
+use TYPO3\CMS\Core\Log\LogManager;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\MathUtility;
@@ -147,7 +148,16 @@ class LoggingService implements SingletonInterface
       // Cowardly refusing to create an empty log message
       return;
     }
-    $fp = fopen($logFile, 'a+');
+    try {
+        $fp = fopen($logFile, 'a+');
+    } catch (\Throwable $throwable) {
+        $logger = GeneralUtility::makeInstance(LogManager::class)
+            ->getLogger(self::class);
+        // This error can occur in case the project has automated deployments and changes the rights of a symlink
+        $logger->error('Could not open logfile "' . $logFile . '": ' . $throwable->getMessage());
+        return;
+    }
+
     // FIXME: $fp should not return boolean !!
     if ($fp !== false) {
       $validLogLevels = LogLevel::atLeast(LogLevel::WARNING);
