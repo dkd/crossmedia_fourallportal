@@ -36,7 +36,7 @@ class LogEntry
   {
     return match ($this->severity) {
       LogLevel::CRITICAL, LogLevel::ERROR, LogLevel::WARNING => 'danger',
-      default => 'default',
+      default => 'dark',
     };
   }
 }
