@@ -430,7 +430,11 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             $childType = substr($usedTargetType, strpos($usedTargetType, '<') + 1, -1);
             // TODO: How to handle list of child types
             $childType = trim($childType, '\\');
-            $objectStorage = new ObjectStorage();
+            // Use existing storage if available
+            $objectStorage = ObjectAccess::getProperty($object, $propertyName);
+            if (!($objectStorage instanceof ObjectStorage)) {
+                $objectStorage = new ObjectStorage();
+            }
 
             if (!empty($propertyValue)) {
                 foreach ((array)$propertyValue as $identifier) {
@@ -510,7 +514,10 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                         continue;
                     }
 
-                    $objectStorage->attach($child);
+                    // Did not add the child if it already exists in the storage
+                    if (!$objectStorage->contains($child)) {
+                        $objectStorage->attach($child);
+                    }
                 }
             }
 
