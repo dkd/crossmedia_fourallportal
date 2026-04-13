@@ -593,7 +593,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     }
                 }
             } elseif ($childType === FileReference::class) {
-                $objectStorage->removeAll();
+                $objectStorage->removeAll($objectStorage);
             }
 
             $propertyValue = $objectStorage;
