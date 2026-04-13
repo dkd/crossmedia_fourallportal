@@ -27,6 +27,7 @@ use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\TypoScript\FrontendTypoScript;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Resource\File;
+use TYPO3\CMS\Extbase\Domain\Model\FileReference;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
 use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapper;
@@ -415,6 +416,8 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             $collections[] = $targetType;
         }
 
+        $logPrefix = '[' . get_class($object) . ':' . $objectId . '][' . $propertyName . '] ';
+
         /*
          * This whole section needs refactoring
          * Threw out the use of union types in PHP and the possibillity to define multiple types within a collection
@@ -435,13 +438,50 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             if (!($objectStorage instanceof ObjectStorage)) {
                 $objectStorage = new ObjectStorage();
             }
+            $currentItems = null;
+            $getRemoteId = null;
+            if ($childType === FileReference::class) {
+                $getRemoteId = function (mixed $related): string|false {
+                    if (empty($related)) {
+                        return false;
+                    }
+                    return $this->getRemoteIdForFile($related);
+                };
+            } elseif (method_exists($childType, 'getRemoteId')) {
+                $getRemoteId = function (mixed $related): string|false {
+                    if (empty($related)) {
+                        return false;
+                    }
+                    if (method_exists($related, 'getRemoteId')) {
+                        return $related->getRemoteId();
+                    }
+                    return false;
+                };
+            }
+
+            if (is_callable($getRemoteId)) {
+                $currentItems = [];
+                $relations = $objectStorage->getArray();
+                foreach ($relations as $related) {
+                    try {
+                        $remoteId = $getRemoteId($related);
+                        if (!empty($remoteId)) {
+                            $currentItems[] = $remoteId;
+                        }
+                    } catch (\Throwable $throwable) {
+                        $this->logger?->error($logPrefix . $throwable->getMessage());
+                    }
+                }
+            }
 
             if (!empty($propertyValue)) {
+                $usedChilds = [];
                 foreach ((array)$propertyValue as $identifier) {
                     if (!$identifier) {
                         continue;
                     }
                     $typeConverter = $propertyMapper->findTypeConverter($identifier, $childType, $configuration);
+
                     if ($typeConverter instanceof PimBasedTypeConverterInterface) {
                         $typeConverter->setParentObjectAndProperty($object, $propertyName);
                     }
@@ -514,11 +554,46 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                         continue;
                     }
 
+                    $usedChilds[] = $identifier;
+
                     // Did not add the child if it already exists in the storage
-                    if (!$objectStorage->contains($child)) {
+                    if ($currentItems !== null && !in_array($identifier, $currentItems)) {
+                        $objectStorage->attach($child);
+                        $this->logger?->debug($logPrefix . '(1) Add relation to ' . $identifier);
+                    } elseif ($currentItems === null && !$objectStorage->contains($child)) {
+                        $this->logger?->debug($logPrefix . '(2) Add relation to ' . $identifier);
                         $objectStorage->attach($child);
                     }
                 }
+
+                if (is_callable($getRemoteId)) {
+                    // Currently no connected mode is supported
+                    $relations = $objectStorage->getArray();
+                    $processed = [];
+                    foreach ($relations as $related) {
+                        try {
+                            $remoteId = $getRemoteId($related);
+                            if (!empty($remoteId)) {
+                                if (!in_array($remoteId, $usedChilds)) {
+                                    $this->logger?->debug($logPrefix . 'Remove unused relation to ' . $remoteId);
+                                    $objectStorage->detach($related);
+                                } elseif (in_array($remoteId, $processed)) {
+                                    $this->logger?->debug($logPrefix . 'Remove duplicate relation to ' . $remoteId);
+                                    $objectStorage->detach($related);
+                                } else {
+                                    $processed[] = $remoteId;
+                                }
+                            } else {
+                                $this->logger?->warning($logPrefix . 'Could not resolve remote id for  ' . get_class($related));
+                            }
+                        } catch (\Throwable $throwable) {
+                            $this->logger?->error($throwable->getMessage());
+                            $this->loggingService->logObjectActivity($objectId, $throwable->getMessage(), LogLevel::ERROR);
+                        }
+                    }
+                }
+            } elseif ($childType === FileReference::class) {
+                $objectStorage->removeAll();
             }
 
             $propertyValue = $objectStorage;
@@ -661,7 +736,43 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
      */
     protected function processRelationships($object, array $data, Event $event)
     {
+    }
 
+    protected function getRemoteIdForFile(mixed $file): string|false
+    {
+        $fileUid = 0;
+        if ($file instanceof \TYPO3\CMS\Extbase\Domain\Model\FileReference) {
+            $fileUid = $file->getOriginalResource()
+                ->getOriginalFile()
+                ->getUid();
+        } elseif ($file instanceof \TYPO3\CMS\Extbase\Domain\Model\File || $file instanceof \TYPO3\CMS\Core\Resource\File) {
+            $fileUid = $file
+                ->getUid();
+        } elseif ($file instanceof \TYPO3\CMS\Core\Resource\FileReference) {
+            $fileUid = $file
+                ->getOriginalFile()
+                ->getUid();
+        } else {
+            return false;
+        }
+        return $this->getRemoteIdFromTable('sys_file', $fileUid);
+    }
+
+    protected function getRemoteIdFromTable(string $tableName, int $uid): string|false
+    {
+        if ($uid === 0) {
+            return false;
+        }
+        try {
+            $queryBuilder = $this->connectionPool->getQueryBuilderForTable($tableName);
+            return $queryBuilder->select('remote_id')
+                ->from($tableName)
+                ->where($queryBuilder->expr()->eq('uid', $uid))
+                ->executeQuery()
+                ->fetchOne();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**

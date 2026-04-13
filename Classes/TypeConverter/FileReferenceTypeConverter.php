@@ -141,7 +141,10 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
         $referenceProperties[$GLOBALS['TCA']['sys_file_reference']['ctrl']['tstamp']] = time();
     }
 
-    if ($systemLanguageUid > 0) {
+      /*
+       * Only make a translation if the site is in connected mode
+       */
+    if ($systemLanguageUid > 0 && $this->isConnectedMode()) {
       // Value of 'uid_local' pointed to the translated file
       $translatedFile = $this->determineDataUid(
         'sys_file',
@@ -255,6 +258,16 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
         )
         ->executeQuery()
         ->fetchAssociative();
+  }
+
+    /**
+     * Returns true if the translations should use the connected mode
+     *
+     * @return bool
+     */
+  protected function isConnectedMode(): bool
+  {
+      return false;
   }
 
   /**
