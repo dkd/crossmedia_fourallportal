@@ -5,80 +5,111 @@
 
 <f:layout name="Module"/>
 <f:section name="Content">
-    <h1>Event history, object
-      <f:link.action action="index" arguments="{search: event.objectId, status: 'all'}">
-        {event.objectId}
-      </f:link.action>
-    </h1>
-  <f:flashMessages/>
+	<f:variable name="returnTo" value="{returnTo -> f:or(alternative: {})}" />
+	<h1>Event history, object
+		<f:link.action action="index" arguments="{search: event.objectId, status: 'all'}">
+			{event.objectId}
+		</f:link.action>
+	</h1>
+	<f:flashMessages/>
 
-  <f:if condition="{deletedScheduled}">
-    <f:then>
+	<f:if condition="{deletedScheduled}">
+		<f:then>
 			<f:be.infobox title="Object will be deleted" state="1">There is a pending delete event for the object. You may not be able to</f:be.infobox>
-    </f:then>
-    <f:else if="{deleted}">
+		</f:then>
+		<f:else if="{deleted}">
 			<f:be.infobox title="Object is deleted" state="2">The object has been deleted from the PIM system. You will no longer be able to query
 				data for this object or replay previous events.</f:be.infobox>
-    </f:else>
-  </f:if>
+		</f:else>
+	</f:if>
 	<f:link.action
-	action="index"
-	extensionName="Fourallportal"
-	controller="Event"
-	class="btn btn-default" title="Overview">
-                                    <span class="text-danger">
-                                        <core:icon identifier="actions-refresh"
-																									 alternativeMarkupIdentifier="inline"/>
-                                    </span>
-	Overview
-</f:link.action>
+		action="index"
+		extensionName="Fourallportal"
+		controller="Event"
+		class="btn btn-default" title="Overview">
+			<span class="text-danger">
+					<core:icon
+						identifier="actions-refresh"
+						alternativeMarkupIdentifier="inline"/>
+			</span>
+			Overview
+	</f:link.action>
 	<f:link.action
 		action="execute"
-		arguments="{event: event}"
+		arguments="{event: event, returnTo: returnTo}"
 		extensionName="Fourallportal"
 		controller="Event"
 		class="btn btn-danger" title="Execute event">
-                                    <span>
-                                        <core:icon identifier="actions-play"
-																									 alternativeMarkupIdentifier="inline"/>
-                                    </span>
+		<span>
+				<core:icon
+					identifier="actions-play"
+					alternativeMarkupIdentifier="inline"/>
+		</span>
 		Execute
 	</f:link.action>
 	<f:link.action
 		action="reset"
-		arguments="{event: event}"
+		arguments="{event: event, returnTo: returnTo}"
 		extensionName="Fourallportal"
 		controller="Event"
 		class="btn btn-default" title="Reset event">
-                                    <span class="text-danger">
-                                        <core:icon identifier="actions-refresh"
-																									 alternativeMarkupIdentifier="inline"/>
-                                    </span>
+		<span class="text-danger">
+				<core:icon
+					identifier="actions-refresh"
+					alternativeMarkupIdentifier="inline"/>
+		</span>
 		Reset
 	</f:link.action>
+
 	<hr>
 
-  <f:render partial="Events"
-            arguments="{events: events, highlightEvent: event, paginate: 0, deleted: deleted}"/>
+	<ul class="nav nav-tabs" id="myTab" role="tablist">
+		<li class="nav-item" role="presentation">
+			<button class="nav-link active" id="events-tab" data-bs-toggle="tab" data-bs-target="#events" type="button" role="tab" aria-controls="events" aria-selected="true">Events</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="event-log-tab" data-bs-toggle="tab" data-bs-target="#event-log" type="button" role="tab" aria-controls="event-log" aria-selected="false"{f:if(condition: '{f:count(eventLog)} = 0', then: ' disabled')}>Event log</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="object-log-tab" data-bs-toggle="tab" data-bs-target="#object-log" type="button" role="tab" aria-controls="object-log" aria-selected="false"{f:if(condition: '{f:count(objectLog)} = 0', then: ' disabled')}>Object log</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="request-tab" data-bs-toggle="tab" data-bs-target="#request" type="button" role="tab" aria-controls="request" aria-selected="false">Request</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="response-tab" data-bs-toggle="tab" data-bs-target="#response" type="button" role="tab" aria-controls="response" aria-selected="false">Response</button>
+		</li>
+	</ul>
 
+	<div class="tab-content">
+		<div class="tab-pane active" id="events" role="tabpanel" aria-labelledby="events-tab" tabindex="0">
+			<f:render
+				partial="Events"
+				arguments="{events: events, highlightEvent: event, paginate: 0, deleted: deleted, returnTo: returnTo}"/>
+		</div>
+		<div class="tab-pane" id="event-log" role="tabpanel" aria-labelledby="event-log-tab" tabindex="0">
+			<f:render partial="Log" arguments="{log: eventLog}"/>
+		</div>
+		<div class="tab-pane" id="object-log" role="tabpanel" aria-labelledby="object-log-tab" tabindex="0">
+			<f:render partial="Log" arguments="{log: objectLog}"/>
+		</div>
+		<div class="tab-pane" id="request" role="tabpanel" aria-labelledby="request-tab" tabindex="0">
+			<f:format.raw>{event.payload}</f:format.raw>
+		</div>
+		<div class="tab-pane" id="response" role="tabpanel" aria-labelledby="response-tab" tabindex="0">
+			<pre>
+				<h2>Response headers</h2>
+				<pre>
+					<f:format.raw>{event.headers}</f:format.raw>
+				</pre>
 
-  <h3>Event log</h3>
-  <f:render partial="Log" arguments="{log: eventLog}"/>
-
-  <h3>Object log</h3>
-  <f:render partial="Log" arguments="{log: objectLog}"/>
-
-  <h4>Request payload</h4>
-	<pre>
-  	<f:format.raw>{event.payload}</f:format.raw>
-	</pre>
-  <h4>Response headers</h4>
-  <f:format.raw>{event.headers}</f:format.raw>
-
-  <h4>Response body</h4>
-	<pre>
-  	<f:format.raw>{event.response}</f:format.raw>
-	</pre>
+				<h2>Response body</h2>
+				<pre>
+					<f:format.raw>{event.response}</f:format.raw>
+				</pre>
+			</pre>
+		</div>
+	</div>
 </f:section>
 
 </html>
