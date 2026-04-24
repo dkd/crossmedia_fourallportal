@@ -23,6 +23,7 @@
     "ext-mbstring": "*",
     "psr/http-message": "^1.1 || ^2.0",
     "psr/log": "^2.0 || ^3.0",
+    "symfony/messenger": "^6.4 || ^7.0",
     "typo3/cms-core": "^12.4",
     "typo3/cms-backend": "^12.4",
     "typo3/cms-extbase": "^12.4",

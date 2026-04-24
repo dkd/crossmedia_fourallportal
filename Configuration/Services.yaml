@@ -41,3 +41,11 @@ services:
     tags:
       - name: event.listener
         event: TYPO3\CMS\Core\Database\Event\AlterTableDefinitionStatementsEvent
+
+  Crossmedia\Fourallportal\Queue\Handler\EventExecutionHandler:
+    tags:
+      - name: 'messenger.message_handler'
+
+  Crossmedia\Fourallportal\Queue\Handler\SynchronizationHandler:
+    tags:
+      - name: 'messenger.message_handler'

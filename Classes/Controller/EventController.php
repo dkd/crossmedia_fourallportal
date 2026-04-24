@@ -13,17 +13,16 @@ namespace Crossmedia\Fourallportal\Controller;
  *
  ***/
 
-use Crossmedia\Fourallportal\Domain\Dto\SyncParameters;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Repository\EventRepository;
-use Crossmedia\Fourallportal\Hook\EventExecutionHookInterface;
-use Crossmedia\Fourallportal\Response\CollectingResponse;
-use Crossmedia\Fourallportal\Service\EventExecutionService;
+use Crossmedia\Fourallportal\Queue\Message\EventExecuteMessage;
+use Crossmedia\Fourallportal\Queue\Message\SynchronizeMessage;
 use Crossmedia\Fourallportal\Service\LoggingService;
 use Crossmedia\Fourallportal\Utility\ControllerUtility;
 use Crossmedia\Fourallportal\ViewHelpers\NumberedPagination;
 use Doctrine\DBAL\Exception;
 use Psr\Http\Message\ResponseInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 use TYPO3\CMS\Backend\Attribute\AsController;
 use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -41,20 +40,25 @@ use TYPO3\CMS\Extbase\Annotation\IgnoreValidation;
 #[AsController]
 final class EventController extends ActionController
 {
+    private const array RETURN_TO_PARAMETERS = [
+        'status',
+        'search',
+        'objectId',
+        'currentPage',
+        'event'
+    ];
+
   /**
    * @param EventRepository|null $eventRepository
-   * @param EventExecutionService|null $eventExecutionService
    * @param LoggingService|null $loggingService
-   * @param SyncParameters|null $syncParameters
    * @param ModuleTemplateFactory $moduleTemplateFactory
    */
   public function __construct(
     protected ?EventRepository       $eventRepository,
-    protected ?EventExecutionService $eventExecutionService,
     protected ?LoggingService        $loggingService,
-    protected ?SyncParameters        $syncParameters,
-    protected ModuleTemplateFactory  $moduleTemplateFactory)
-  {
+    protected ModuleTemplateFactory  $moduleTemplateFactory,
+    private readonly MessageBusInterface $bus,
+  ) {
   }
 
   /**
@@ -68,8 +72,13 @@ final class EventController extends ActionController
    * @throws InvalidQueryException
    */
   #[IgnoreValidation(['argumentName' => 'modifiedEvent'])]
-  public function indexAction(string $status = null, string $search = null, string $objectId = null, ?Event $modifiedEvent = null, int $currentPage = 1): ResponseInterface
-  {
+  public function indexAction(
+      string $status = null,
+      string $search = null,
+      string $objectId = null,
+      ?Event $modifiedEvent = null,
+      int $currentPage = 1
+  ): ResponseInterface {
     $eventOptions = [
       'pending' => 'Status: pending',
       'failed' => 'Status: failed',
@@ -105,6 +114,13 @@ final class EventController extends ActionController
 
     // create header menu
     ControllerUtility::addMainMenu($this->request, $this->uriBuilder, $view, 'Event');
+    $returnTo = [
+        'action' => 'index',
+        'status' => $status,
+        'search' => $search,
+        'objectId' => $objectId,
+        'currentPage' => $currentPage
+    ];
     // assign values
     $view->assignMultiple([
       'searchWidened' => $searchWidened,
@@ -116,6 +132,7 @@ final class EventController extends ActionController
       'eventStatusOptions' => $eventOptions,
       'paginator' => $paginator,
       'pagination' => $pagination,
+      'returnTo' => $returnTo
     ]);
     return $view->renderResponse('Event/Index');
   }
@@ -131,12 +148,20 @@ final class EventController extends ActionController
     // create header menu
     ControllerUtility::addMainMenu($this->request, $this->uriBuilder, $view, 'Event');
     $events = $this->eventRepository->findByObjectId($event->getObjectId());
-
-    $view->assign('event', $event);
-    $view->assign('event_json', 'event json value equals, traa: ' . json_encode($event));
-    $view->assign('events', $events);
-    $view->assign('eventLog', $this->loggingService->getEventActivity($event, 20));
-    $view->assign('objectLog', $this->loggingService->getObjectActivity($event->getObjectId(), 100));
+      $returnTo = [
+          'action' => 'check',
+          'event' => $event->getUid()
+      ];
+    $view->assignMultiple(
+        [
+            'event' => $event,
+            'event_json' => 'event json value equals, traa: ' . json_encode($event),
+            'events' => $events,
+            'eventLog' => $this->loggingService->getEventActivity($event, 20),
+            'objectLog' =>$this->loggingService->getObjectActivity($event->getObjectId(), 100),
+            'returnTo' => $returnTo
+        ]
+    );
     foreach ($events as $historicalEvent) {
       if ($historicalEvent->getEventType() === 'delete') {
         $view->assign('deleted', ($historicalEvent->getStatus() === 'claimed'));
@@ -160,7 +185,26 @@ final class EventController extends ActionController
     $event->setRetries(0);
     $this->eventRepository->update($event);
     $this->loggingService->logEventActivity($event, 'Event reset');
-    return $this->redirect('index', null, null, ['status' => 'pending']);
+
+    $returnTo = $this->request->getQueryParams()['returnTo'] ?? [];
+    $action = $returnTo['action'] ?? 'index';
+    $arguments = [
+        'status' => 'pending'
+    ];
+
+    foreach ($returnTo as $fieldName => $value) {
+        if (!in_array($fieldName, self::RETURN_TO_PARAMETERS)) {
+            continue;
+        }
+        $arguments[$fieldName] = $value;
+    }
+
+    return $this->redirect(
+        $action,
+        null,
+        null,
+        $arguments
+    );
   }
 
   /**
@@ -170,23 +214,37 @@ final class EventController extends ActionController
    */
   public function executeAction(Event $event): ResponseInterface
   {
-    $fakeResponse = new CollectingResponse();
-    $this->eventExecutionService->setResponse($fakeResponse);
-    $this->eventExecutionService->processEvent($event, false);
+      $message = new EventExecuteMessage(
+          $event->getModule()?->getModuleName(),
+          $event->getEventId()
+      );
+      $this->bus->dispatch($message);
 
-    $message = $fakeResponse->getCollected() ?: 'No output from action';
+      $this->addFlashMessage(
+          'Event ' . $event->getEventId() . ' was queued for processing',
+          'Event dispatch'
+      );
 
-    /* Any hooks for post-execution processing */
-    if (is_array($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] ?? null)) {
-      foreach ($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] as $postExecutionHookClass) {
-        /** @var EventExecutionHookInterface $postExecutionHookInstance */
-        $postExecutionHookInstance = GeneralUtility::makeInstance($postExecutionHookClass);
-        $postExecutionHookInstance->postSingleManualEventExecution($event);
+      $returnTo = $this->request->getQueryParams()['returnTo'] ?? [];
+      $action = $returnTo['action'] ?? 'index';
+      $arguments = [
+          'status' => 'pending',
+          'modifiedEvent' => $event->getUid()
+      ];
+
+      foreach ($returnTo as $fieldName => $value) {
+          if (!in_array($fieldName, self::RETURN_TO_PARAMETERS)) {
+              continue;
+          }
+          $arguments[$fieldName] = $value;
       }
-    }
 
-    $this->addFlashMessage($message, 'Executed event ' . $event->getEventId());
-    return $this->redirect('index', null, null, ['modifiedEvent' => $event->getUid()]);
+      return $this->redirect(
+          $action,
+          null,
+          null,
+          $arguments
+      );
   }
 
   /**
@@ -198,12 +256,13 @@ final class EventController extends ActionController
    */
   public function syncAction(): ResponseInterface
   {
-    $syncParameters = $this->syncParameters->setSync(true)->setExecute(false);
-    $fakeResponse = new CollectingResponse();
-    $this->eventExecutionService->setResponse($fakeResponse);
-    $this->eventExecutionService->sync($syncParameters);
-    $this->addFlashMessage(nl2br($fakeResponse->getCollected()) ?: 'No new events to fetch', 'Executed');
-    return $this->redirect('index');
+      $message = new SynchronizeMessage();
+      $this->bus->dispatch($message);
+      $this->addFlashMessage(
+          'Synchronization was queued',
+          'Event dispatch'
+      );
+      return $this->redirect('index');
   }
 
   /**
