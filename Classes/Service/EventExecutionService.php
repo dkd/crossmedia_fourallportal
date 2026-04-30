@@ -534,15 +534,19 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     return rtrim(Environment::getVarPath(), '/') . '/lock/lock_4ap_sync.lock';
   }
 
-  /**
-   * @param Event $event
-   * @param bool $updateEventId
-   * @param SyncParameters|null $parameters
-   * @throws ApiException
-   * @throws \Doctrine\DBAL\Exception
-   * @throws ExtensionConfigurationExtensionNotConfiguredException
-   * @throws ExtensionConfigurationPathDoesNotExistException
-   */
+    /**
+     * @param Event $event
+     * @param bool $updateEventId
+     * @param SyncParameters|null $parameters
+     * @return void
+     * @throws ApiException
+     * @throws ExtensionConfigurationExtensionNotConfiguredException
+     * @throws ExtensionConfigurationPathDoesNotExistException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     * @throws \Doctrine\DBAL\Exception
+     * @throws \Throwable
+     */
   public function processEvent(Event $event, bool $updateEventId = true, ?SyncParameters $parameters = null): void
   {
     if ($event->isProcessing()) {

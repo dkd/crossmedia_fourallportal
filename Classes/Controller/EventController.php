@@ -84,6 +84,7 @@ final class EventController extends ActionController
       'failed' => 'Status: failed',
       'deferred' => 'Status: deferred',
       'claimed' => 'Status: claimed',
+      'queued' => 'Status: in Queue',
       'all' => 'Status: all'
     ];
 
@@ -180,9 +181,7 @@ final class EventController extends ActionController
    */
   public function resetAction(Event $event): ResponseInterface
   {
-    $event->setStatus('pending');
-    $event->setNextRetry(0);
-    $event->setRetries(0);
+    $event->reset();
     $this->eventRepository->update($event);
     $this->loggingService->logEventActivity($event, 'Event reset');
 
@@ -214,6 +213,9 @@ final class EventController extends ActionController
    */
   public function executeAction(Event $event): ResponseInterface
   {
+      $event->reset();
+      $event->setStatus('queued');
+      $this->eventRepository->update($event);
       $message = new EventExecuteMessage(
           $event->getModule()?->getModuleName(),
           $event->getEventId()
@@ -221,14 +223,21 @@ final class EventController extends ActionController
       $this->bus->dispatch($message);
 
       $this->addFlashMessage(
-          'Event ' . $event->getEventId() . ' was queued for processing',
-          'Event dispatch'
+          vsprintf(
+              'Event %1$s for object %2$s was queue for processing. Please be aware that this can take a while before you see changes.' . PHP_EOL .
+              'The see the current state of the event please filter the event list for the status "in Queue"',
+              [
+                  $event->getEventId(),
+                  $event->getObjectId()
+              ]
+          ),
+          'Event dispatched'
       );
 
       $returnTo = $this->request->getQueryParams()['returnTo'] ?? [];
       $action = $returnTo['action'] ?? 'index';
       $arguments = [
-          'status' => 'pending',
+          'status' => 'queued',
           'modifiedEvent' => $event->getUid()
       ];
 
@@ -259,7 +268,8 @@ final class EventController extends ActionController
       $message = new SynchronizeMessage();
       $this->bus->dispatch($message);
       $this->addFlashMessage(
-          'Synchronization was queued',
+          'Synchronization was queued for processing.' . PHP_EOL .
+          'Please be aware that this can take a while before the synchronization starts and is completed.',
           'Event dispatch'
       );
       return $this->redirect('index');

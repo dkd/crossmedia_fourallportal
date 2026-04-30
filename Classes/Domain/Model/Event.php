@@ -44,6 +44,20 @@ class Event extends AbstractEntity
   protected bool $processing = false;
   protected array $beanData = [];
 
+  /**
+   * Reset the event for processing
+   *
+   * @return $this
+   */
+  public function reset(): self
+  {
+      $this->setStatus('pending');
+      $this->setNextRetry(0);
+      $this->setProcessing(false);
+      $this->setRetries(0);
+      return $this;
+  }
+
   public function getBeanData(): array
   {
     return $this->beanData;

@@ -24,6 +24,7 @@ use Crossmedia\Fourallportal\Domain\Repository\ModuleRepository;
 use Crossmedia\Fourallportal\Hook\EventExecutionHookInterface;
 use Crossmedia\Fourallportal\Queue\Message\EventExecuteMessage;
 use Crossmedia\Fourallportal\Service\EventExecutionService;
+use Crossmedia\Fourallportal\Service\LoggingService;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class EventExecutionHandler
@@ -31,7 +32,8 @@ class EventExecutionHandler
     public function __construct(
         protected readonly EventExecutionService $eventExecutionService,
         protected readonly ModuleRepository $moduleRepository,
-        protected readonly EventRepository $eventRepository
+        protected readonly EventRepository $eventRepository,
+        protected readonly LoggingService $loggingService,
     ) {
     }
 
@@ -51,14 +53,31 @@ class EventExecutionHandler
         if (!($event instanceof Event)) {
             return;
         }
-        $this->eventExecutionService->processEvent($event, false);
-        /* Any hooks for post-execution processing */
-        if (is_array($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] ?? null)) {
-            foreach ($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] as $postExecutionHookClass) {
-                /** @var EventExecutionHookInterface $postExecutionHookInstance */
-                $postExecutionHookInstance = GeneralUtility::makeInstance($postExecutionHookClass);
-                $postExecutionHookInstance->postSingleManualEventExecution($event);
+        try {
+            $event->setProcessing(false);
+            $this->eventExecutionService->processEvent($event, false);
+            /* Any hooks for post-execution processing */
+            if (is_array($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] ?? null)) {
+                foreach ($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] as $postExecutionHookClass) {
+                    /** @var EventExecutionHookInterface $postExecutionHookInstance */
+                    $postExecutionHookInstance = GeneralUtility::makeInstance($postExecutionHookClass);
+                    $postExecutionHookInstance->postSingleManualEventExecution($event);
+                }
             }
+        } catch (\Throwable $throwable) {
+            $this->updateEvent(
+                $event,
+                'failed',
+                'Event failed with ' . $throwable->getMessage()
+            );
         }
+    }
+
+    protected function updateEvent(Event $event, string $status, string $logMessage): void
+    {
+        $this->loggingService->logEventActivity($event, $logMessage);
+        $event->setProcessing(false);
+        $event->setStatus($status);
+        $this->eventRepository->update($event);
     }
 }
