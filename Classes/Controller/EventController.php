@@ -85,6 +85,7 @@ final class EventController extends ActionController
       'deferred' => 'Status: deferred',
       'claimed' => 'Status: claimed',
       'queued' => 'Status: in Queue',
+      'processing' => 'Status: processing',
       'all' => 'Status: all'
     ];
 
@@ -216,6 +217,7 @@ final class EventController extends ActionController
       $event->reset();
       $event->setStatus('queued');
       $this->eventRepository->update($event);
+      $this->loggingService->logEventActivity($event, 'Event queued for execution');
       $message = new EventExecuteMessage(
           $event->getModule()?->getModuleName(),
           $event->getEventId()
@@ -285,17 +287,28 @@ final class EventController extends ActionController
   {
     $query = $this->eventRepository->createQuery();
     $constraints = null;
-    if ($status !== 'all') {
+
+    if ($status === 'processing') {
+      $constraints = $query->equals('processing', true);
+    } elseif ($status !== 'all') {
       $constraints = $query->equals('status', $status);
     }
 
     if ($search) {
-      $constraints = $query->logicalOr(
-        $query->equals('eventId', (integer)$search),
+      $constraintsSearch = $query->logicalOr(
+        $query->equals('eventId', (int)$search),
         $query->like('module.connectorName', '%' . $search . '%'),
         $query->like('objectId', '%' . $search . '%'),
         $query->like('eventType', '%' . $search . '%'),
       );
+      if ($constraints === null) {
+          $constraints = $constraintsSearch;
+      } else {
+          $constraints = $query->logicalAnd(
+              $constraints,
+              $constraintsSearch
+          );
+      }
     }
 
     if ($constraints) {
