@@ -214,9 +214,7 @@ final class EventController extends ActionController
    */
   public function executeAction(Event $event): ResponseInterface
   {
-      $event->reset();
-      $event->setStatus('queued');
-      $this->eventRepository->update($event);
+      $this->eventRepository->queueEvent($event);
       $this->loggingService->logEventActivity($event, 'Event queued for execution');
       $message = new EventExecuteMessage(
           $event->getModule()?->getModuleName(),

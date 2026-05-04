@@ -2,6 +2,7 @@
 
 namespace Crossmedia\Fourallportal\Domain\Repository;
 
+use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\Module;
 use TYPO3\CMS\Extbase\Persistence\Exception\InvalidQueryException;
 use TYPO3\CMS\Extbase\Persistence\QueryResultInterface;
@@ -126,4 +127,19 @@ class EventRepository extends Repository
     );
     return $query->execute()->getFirst();
   }
+
+    /**
+     * Mark an event as queued for asynchronous execution
+     *
+     * @param Event $event
+     * @return void
+     * @throws \TYPO3\CMS\Extbase\Persistence\Exception\IllegalObjectTypeException
+     * @throws \TYPO3\CMS\Extbase\Persistence\Exception\UnknownObjectException
+     */
+    public function queueEvent(Event $event): void
+    {
+        $event->reset();
+        $event->setStatus('queued');
+        $this->update($event);
+    }
 }
