@@ -534,29 +534,36 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     return rtrim(Environment::getVarPath(), '/') . '/lock/lock_4ap_sync.lock';
   }
 
-    /**
-     * @param Event $event
-     * @param bool $updateEventId
-     * @param SyncParameters|null $parameters
-     * @return void
-     * @throws ApiException
-     * @throws ExtensionConfigurationExtensionNotConfiguredException
-     * @throws ExtensionConfigurationPathDoesNotExistException
-     * @throws IllegalObjectTypeException
-     * @throws UnknownObjectException
-     * @throws \Doctrine\DBAL\Exception
-     * @throws \Throwable
-     */
-  public function processEvent(Event $event, bool $updateEventId = true, ?SyncParameters $parameters = null): void
-  {
+  /**
+   * Execute a single event
+   *
+   * @param Event $event
+   * @param bool $updateEventId
+   * @param SyncParameters|null $parameters
+   * @return bool|null
+   * @throws ApiException
+   * @throws ExtensionConfigurationExtensionNotConfiguredException
+   * @throws ExtensionConfigurationPathDoesNotExistException
+   * @throws IllegalObjectTypeException
+   * @throws UnknownObjectException
+   * @throws \Doctrine\DBAL\Exception
+   * @throws \Throwable
+   */
+  public function processEvent(
+      Event &$event,
+      bool $updateEventId = true,
+      ?SyncParameters $parameters = null
+  ): bool|null {
     if ($event->isProcessing()) {
-      return;
+      return null;
     }
 
-    $this->response->setDescription(
-      'Processing ' . $event->getStatus() . ' event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '" - ' .
-      $event->getEventType() . ' ' . $event->getObjectId() . PHP_EOL
-    )->send();
+    $this->response
+        ->setDescription(
+            'Processing ' . $event->getStatus() . ' event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '" - ' .
+            $event->getEventType() . ' ' . $event->getObjectId() . PHP_EOL
+        )
+        ->send();
 
     $event->setProcessing(true);
     $client = $event->getModule()->getServer()->getClient();
@@ -662,5 +669,6 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       throw $exception;
     }
     $parameters?->countExecutedEvent();
+    return $event->getStatus() === 'claimed';
   }
 }
