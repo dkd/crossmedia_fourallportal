@@ -22,7 +22,6 @@ use Crossmedia\Fourallportal\Utility\ControllerUtility;
 use Crossmedia\Fourallportal\ViewHelpers\NumberedPagination;
 use Doctrine\DBAL\Exception;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use TYPO3\CMS\Backend\Attribute\AsController;
 use TYPO3\CMS\Backend\Template\Components\ButtonBar;
@@ -120,7 +119,16 @@ final class EventController extends ActionController
             } while ($events->count() === 0 && next($eventOptions));
         }
         $view = $this->moduleTemplateFactory->create($this->request);
-        $this->makeButtons($view, $this->request);
+        $this->makeButtons(
+            $view,
+            'index',
+            [
+                'status' => $status,
+                'search' => $search,
+                'objectId' => $objectId,
+                'currentPage' => $currentPage,
+            ]
+        );
         // pagination$events
         $paginator = new QueryResultPaginator($events ?? null, $currentPage, 50);
         $pagination = new NumberedPagination($paginator, 10);
@@ -158,8 +166,14 @@ final class EventController extends ActionController
     public function checkAction(Event $event): ResponseInterface
     {
         $view = $this->moduleTemplateFactory->create($this->request);
-        $this->makeActionButtons($view, $this->request);
-        $this->makeButtons($view, $this->request);
+        $this->makeActionButtons($view);
+        $this->makeButtons(
+            $view,
+            'check',
+            [
+                'event' => $event->getUid()
+            ]
+        );
         // create header menu
         ControllerUtility::addMainMenu($this->request, $this->uriBuilder, $view, 'Event');
         $events = $this->eventRepository->findByObjectId($event->getObjectId());
@@ -335,13 +349,13 @@ final class EventController extends ActionController
     /**
      * This creates the buttons for the modules
      */
-    protected function makeActionButtons(ModuleTemplate $view, ServerRequestInterface $request): void
+    protected function makeActionButtons(ModuleTemplate $view): void
     {
         $languageService = $this->getLanguageService();
         $buttonBar = $view->getDocHeaderComponent()->getButtonBar();
 
         $indexUri = $this->uriBuilder
-            ->setRequest($request)
+            ->setRequest($this->request)
             ->uriFor('index', [], 'Event');
         // Reload
         $reloadButton = $buttonBar->makeLinkButton()
@@ -355,14 +369,21 @@ final class EventController extends ActionController
     /**
      * This creates the buttons for the modules
      */
-    protected function makeButtons(ModuleTemplate $view, ServerRequestInterface $request): void
-    {
+    protected function makeButtons(
+        ModuleTemplate $view,
+        string $action = 'index',
+        array $arguments = []
+    ): void {
         $languageService = $this->getLanguageService();
         $buttonBar = $view->getDocHeaderComponent()->getButtonBar();
 
+        $reloadUri = $this->uriBuilder
+            ->setRequest($this->request)
+            ->uriFor($action, $arguments, 'Event');
+
         // Reload
         $reloadButton = $buttonBar->makeLinkButton()
-            ->setHref($request->getAttribute('normalizedParams')->getRequestUri())
+            ->setHref($reloadUri)
             ->setTitle($languageService->sL('LLL:EXT:core/Resources/Private/Language/locallang_core.xlf:labels.reload'))
             ->setIcon($this->iconFactory->getIcon('actions-refresh', Icon::SIZE_SMALL));
         $buttonBar->addButton($reloadButton, ButtonBar::BUTTON_POSITION_RIGHT);
