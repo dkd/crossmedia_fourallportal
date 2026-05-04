@@ -120,7 +120,7 @@ class SyncCommand extends Command
         }
 
         if (!$sync && !$execute) {
-            $io->writeln('Either option --sync, --full-sync or --execute has to used' . PHP_EOL);
+            $io->writeln('Either option --sync, --full-sync or --execute has to be used' . PHP_EOL);
             return Command::INVALID;
         }
 
