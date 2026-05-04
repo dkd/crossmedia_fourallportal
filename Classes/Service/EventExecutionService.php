@@ -566,6 +566,8 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         ->send();
 
     $event->setProcessing(true);
+    $this->eventRepository->update($event);
+    $this->persistenceManager->persistAll();
     $client = $event->getModule()->getServer()->getClient();
     try {
       $mapper = $event->getModule()->getMapper();
@@ -589,6 +591,8 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       if ($updateEventId) {
         $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
       }
+      $this->eventRepository->update($event);
+      $this->persistenceManager->persistAll();
       if ($mapper->import($responseData, $event)) {
         // This method returns TRUE if any property caused problems that were also logged. When this
         // happens, throw a deferral exception and let the catch statement below handle deferral.
