@@ -25,6 +25,7 @@ use Crossmedia\Fourallportal\Hook\EventExecutionHookInterface;
 use Crossmedia\Fourallportal\Queue\Message\EventExecuteMessage;
 use Crossmedia\Fourallportal\Service\EventExecutionService;
 use Crossmedia\Fourallportal\Service\LoggingService;
+use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class EventExecutionHandler
@@ -54,30 +55,67 @@ class EventExecutionHandler
             return;
         }
         try {
+            $this->loggingService->logEventActivity($event, '[Queued event] Begin processing');
             $event->setProcessing(false);
-            $this->eventExecutionService->processEvent($event, false);
+            $success = $this->eventExecutionService->processEvent($event, false);
+            if ($success === false) {
+                $this->updateEvent(
+                    $event,
+                    null, // Keep status as is
+                    '[Queued event] Execution not successful (see event/object log for more information)',
+                    LogLevel::WARNING
+                );
+            } else {
+                $this->loggingService->logEventActivity($event, '[Queued event] Execution successful');
+            }
             /* Any hooks for post-execution processing */
             if (is_array($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] ?? null)) {
                 foreach ($GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['fourallportal']['postEventExecution'] as $postExecutionHookClass) {
-                    /** @var EventExecutionHookInterface $postExecutionHookInstance */
-                    $postExecutionHookInstance = GeneralUtility::makeInstance($postExecutionHookClass);
-                    $postExecutionHookInstance->postSingleManualEventExecution($event);
+                    try {
+                        /** @var EventExecutionHookInterface $postExecutionHookInstance */
+                        $postExecutionHookInstance = GeneralUtility::makeInstance($postExecutionHookClass);
+                        $postExecutionHookInstance->postSingleManualEventExecution($event);
+                    } catch (\Throwable $throwable) {
+                        $this->loggingService->logEventActivity(
+                            $event,
+                            '[Queued event] Post processing by ' . $postExecutionHookClass . ' failed',
+                            severity: LogLevel::ERROR
+                        );
+                    }
                 }
             }
         } catch (\Throwable $throwable) {
             $this->updateEvent(
                 $event,
                 'failed',
-                'Event failed with ' . $throwable->getMessage()
+                '[Queued event] Execution failed with ' . $throwable->getMessage(),
+                LogLevel::ERROR
             );
         }
     }
 
-    protected function updateEvent(Event $event, string $status, string $logMessage): void
-    {
-        $this->loggingService->logEventActivity($event, $logMessage);
+    /**
+     * Update event and write event log message
+     *
+     * @param Event $event
+     * @param string|null $status
+     * @param string $logMessage
+     * @param string $severity
+     * @return void
+     * @throws \TYPO3\CMS\Extbase\Persistence\Exception\IllegalObjectTypeException
+     * @throws \TYPO3\CMS\Extbase\Persistence\Exception\UnknownObjectException
+     */
+    protected function updateEvent(
+        Event $event,
+        string|null $status,
+        string $logMessage,
+        string $severity = LogLevel::INFO
+    ): void {
+        $this->loggingService->logEventActivity($event, $logMessage, $severity);
         $event->setProcessing(false);
-        $event->setStatus($status);
+        if ($status !== null) {
+            $event->setStatus($status);
+        }
         $this->eventRepository->update($event);
     }
 }
