@@ -253,8 +253,8 @@ final class EventController extends ActionController
 
         $this->addFlashMessage(
             vsprintf(
-                'Event %1$s for object %2$s was queue for processing. Please be aware that this can take a while before you see changes.' . PHP_EOL .
-                'The see the current state of the event please filter the event list for the status "in Queue"',
+                'Event %1$s for object %2$s was queued for processing. Please be aware that this can take a while before you see changes.' . PHP_EOL .
+                'To see the current state of the event, please filter the event list for the status "in Queue"',
                 [
                     $event->getEventId(),
                     $event->getObjectId()
