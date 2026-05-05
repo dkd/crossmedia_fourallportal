@@ -3,6 +3,7 @@
 namespace Crossmedia\Fourallportal\Service;
 
 use Crossmedia\Fourallportal\Domain\Dto\SyncParameters;
+use Crossmedia\Fourallportal\Domain\Enum\EventStatus;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\Module;
 use Crossmedia\Fourallportal\Domain\Model\Server;
@@ -83,9 +84,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
    * @param int $events
    * @param string|null $module
    * @param string|null $objectId
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   * @throws \Doctrine\DBAL\Exception
+   * @return void
    */
   public function replay(int $events = 1, string $module = null, string $objectId = null): void
   {
@@ -113,10 +112,17 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       $eventQuery->setLimit($events);
       $eventQuery->setOrderings(['event_id' => 'DESC']);
       foreach ($eventQuery->execute() as $event) {
-        $event->setStatus('pending');
+        $event->setStatus(EventStatus::Pending->value);
         $this->eventRepository->update($event);
         $this->persistenceManager->persistAll();
-        $this->processEvent($event);
+        try {
+            $this->processEvent($event);
+        } catch (\Throwable $throwable) {
+            $this->handleEventException(
+                $event,
+                '[Event replay] Execution failed with ' . $throwable->getMessage()
+            );
+        }
       }
     }
     $this->unlock();
@@ -162,7 +168,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     $activeModules = $this->getActiveModuleOrModules($module);
 
     $deferredEvents = [];
-    foreach ($this->eventRepository->findByStatus('deferred') as $event) {
+    foreach ($this->eventRepository->findByStatus(EventStatus::Deferred->value) as $event) {
       if (in_array($event->getModule()->getModuleName(), $exclude)) {
         continue;
       }
@@ -332,13 +338,10 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
    * @param SyncParameters $parameters
    * @param QueryResultInterface $events
    * @return void
-   * @throws ApiException
-   * @throws ExtensionConfigurationExtensionNotConfiguredException
-   * @throws ExtensionConfigurationPathDoesNotExistException
-   * @throws \Doctrine\DBAL\Exception
    */
   protected function processEvents(SyncParameters $parameters, QueryResultInterface $events): void
   {
+    /** @var Event[] $events */
     foreach ($events as $event) {
       if (!$parameters->shouldContinue()) {
         return;
@@ -346,7 +349,15 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       if ($parameters->isModuleExcluded($event->getModule()->getModuleName())) {
         continue;
       }
-      $this->processEvent($event, true, $parameters);
+
+      try {
+          $this->processEvent($event, true, $parameters);
+      } catch (\Throwable $throwable) {
+          $this->handleEventException(
+              $event,
+              'Event execution failed with ' . $throwable->getMessage()
+          );
+      }
     }
 
     // Trigger post-execution hook
@@ -427,7 +438,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     if (!$event) {
       $event = new Event();
       $new = true;
-    } elseif ($event->getStatus() === 'claimed') {
+    } elseif ($event->getStatus() === EventStatus::Claimed->value) {
       return $event;
     }
 
@@ -436,7 +447,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     $event->setEventId($result['id']);
     $event->setObjectId($result['object_id']);
     $event->setEventType(Event::resolveEventType($result['event_type']));
-    $event->setStatus('pending');
+    $event->setStatus(EventStatus::Pending->value);
 
     if ($new) {
       $this->eventRepository->add($event);
@@ -602,7 +613,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         );
       }
       $event->setRetries(0);
-      $event->setStatus('claimed');
+      $event->setStatus(EventStatus::Claimed->value);
       $event->setMessage('Successfully executed - no additional output available');
       $this->loggingService->logEventActivity($event, 'Event was executed');
     } catch (DeferralException $error) {
@@ -612,7 +623,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       $ttl = (int)($this->extensionConfiguration->get('fourallportal')['eventDeferralTTL'] ?? 86400);
       $now = time();
       $event->setMessage($error->getMessage() . ' (code: ' . $error->getCode() . ')');
-      $event->setStatus('deferred');
+      $event->setStatus(EventStatus::Deferred->value);
       $event->setRetries($event->getRetries() + 1);
       // Next retry time: current time plus, plus number of retries times half an hour, plus/minus 600 seconds to
       // stagger event execution and prevent the bulk from executing at the same time if many deferrals happen
@@ -628,11 +639,11 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         // deferral TTL so that deferral is again allowed, should the event be retried via BE module).
         $event->setSkipUntil(0);
         $event->setRetries(0);
-        $event->setStatus('failed');
+        $event->setStatus(EventStatus::Failed->value);
       }
       $this->loggingService->logEventActivity($event, 'Event was deferred', LogLevel::WARNING);
     } catch (\Throwable $exception) {
-      $event->setStatus('failed');
+      $event->setStatus(EventStatus::Failed->value);
       $event->setRetries(0);
       $event->setMessage($exception->getMessage() . ' (code: ' . $exception->getCode() . ')' . $exception->getFile() . ':' . $exception->getLine());
       if ($updateEventId) {
@@ -673,6 +684,32 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       throw $exception;
     }
     $parameters?->countExecutedEvent();
-    return $event->getStatus() === 'claimed';
+    return $event->getStatus() === EventStatus::Claimed->value;
+  }
+
+  /**
+   * Handle event exceptions
+   *
+   * - Write the event activity
+   * - Set status to failed
+   * - Remove processing flag
+   *
+   * @param Event $event
+   * @param string $message
+   * @return void
+   */
+  public function handleEventException(Event $event, string $message): void
+  {
+      $this->loggingService->logEventActivity(
+          $event,
+          $message,
+          LogLevel::ERROR
+      );
+      if ($event->getStatus() !== EventStatus::Deferred->value) {
+          $event->setStatus(EventStatus::Failed->value);
+      }
+      $event->setProcessing(false);
+      $this->eventRepository->update($event);
+      $this->persistenceManager->persistAll();
   }
 }
