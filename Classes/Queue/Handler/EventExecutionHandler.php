@@ -17,6 +17,7 @@ declare(strict_types=1);
 
 namespace Crossmedia\Fourallportal\Queue\Handler;
 
+use Crossmedia\Fourallportal\Domain\Enum\EventStatus;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\Module;
 use Crossmedia\Fourallportal\Domain\Repository\EventRepository;
@@ -27,14 +28,16 @@ use Crossmedia\Fourallportal\Service\EventExecutionService;
 use Crossmedia\Fourallportal\Service\LoggingService;
 use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 
 class EventExecutionHandler
 {
     public function __construct(
-        protected readonly EventExecutionService $eventExecutionService,
-        protected readonly ModuleRepository $moduleRepository,
-        protected readonly EventRepository $eventRepository,
-        protected readonly LoggingService $loggingService,
+        private readonly EventExecutionService $eventExecutionService,
+        private readonly ModuleRepository $moduleRepository,
+        private readonly EventRepository $eventRepository,
+        private readonly LoggingService $loggingService,
+        private readonly PersistenceManager $manager,
     ) {
     }
 
@@ -87,7 +90,7 @@ class EventExecutionHandler
         } catch (\Throwable $throwable) {
             $this->updateEvent(
                 $event,
-                'failed',
+                EventStatus::Failed,
                 '[Queued event] Execution failed with ' . $throwable->getMessage(),
                 LogLevel::ERROR
             );
@@ -98,7 +101,7 @@ class EventExecutionHandler
      * Update event and write event log message
      *
      * @param Event $event
-     * @param string|null $status
+     * @param EventStatus|null $status
      * @param string $logMessage
      * @param string $severity
      * @return void
@@ -107,15 +110,16 @@ class EventExecutionHandler
      */
     protected function updateEvent(
         Event $event,
-        string|null $status,
+        EventStatus|null $status,
         string $logMessage,
         string $severity = LogLevel::INFO
     ): void {
         $this->loggingService->logEventActivity($event, $logMessage, $severity);
         $event->setProcessing(false);
         if ($status !== null) {
-            $event->setStatus($status);
+            $event->setStatus($status->value);
         }
         $this->eventRepository->update($event);
+        $this->manager->persistAll();
     }
 }
