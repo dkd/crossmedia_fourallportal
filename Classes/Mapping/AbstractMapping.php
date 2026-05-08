@@ -519,6 +519,13 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     if ($child instanceof Error) {
                         // For whatever reason, property validators will return a validation error rather than throw an exception.
                         // We therefore need to check this, log the problem, and skip the property.
+                        $errorMessage = $child->getMessage();
+                        if (empty($errorMessage)) {
+                            $errorMessage = $child->getTitle();
+                        }
+                        if (empty($errorMessage)) {
+                            $errorMessage = 'Code: ' . $child->getCode();
+                        }
 
                         $message = vsprintf(
                             'Mapping error when mapping property %1$s on %2$s:%3$s in language UID %4$s: %5$s',
@@ -527,7 +534,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                                 get_class($object),
                                 $objectId,
                                 $languageUid,
-                                $child->getMessage()
+                                $errorMessage
                             ]
                         );
                         $this->logger?->warning($message);
@@ -673,7 +680,14 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             }
         }
 
-        ObjectAccess::setProperty($setOnObject, $lastPropertyName, $propertyValue);
+        $result = ObjectAccess::setProperty($setOnObject, $lastPropertyName, $propertyValue);
+        if ($result === false) {
+            $message = $logPrefix . 'Setting property "' . $propertyName . '" failed';
+            $this->logger?->error($message);
+        } else {
+            $message = $logPrefix . 'Setting property "' . $propertyName . '" successful';
+            $this->logger?->info($message);
+        }
 
         return $mappingProblemsOccurred;
     }
