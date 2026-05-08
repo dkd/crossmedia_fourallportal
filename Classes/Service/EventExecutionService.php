@@ -322,7 +322,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         }
       }
 
-      while ($parameters->shouldContinue() && ($events = $this->eventRepository->findByStatus('pending', $maxEvents, false)) && $events->count() > 0) {
+      while ($parameters->shouldContinue() && ($events = $this->eventRepository->findByStatus(EventStatus::Pending->value, $maxEvents, false)) && $events->count() > 0) {
           $this->response
               ->setDescription('Processing batch of ' . $events->count() . ' pending events...' . PHP_EOL)
               ->send();

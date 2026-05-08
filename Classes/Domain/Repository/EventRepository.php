@@ -2,6 +2,7 @@
 
 namespace Crossmedia\Fourallportal\Domain\Repository;
 
+use Crossmedia\Fourallportal\Domain\Enum\EventStatus;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\Module;
 use TYPO3\CMS\Extbase\Persistence\Exception\InvalidQueryException;
@@ -95,7 +96,7 @@ class EventRepository extends Repository
     {
         $query = $this->createQuery();
         $constraint = $query->logicalAnd(
-            $query->equals('status', 'deferred'),
+            $query->equals('status', EventStatus::Deferred->value),
             $query->lessThan('nextRetry', time()),
             $query->logicalNot($query->equals('processing', true))
         );
@@ -154,7 +155,7 @@ class EventRepository extends Repository
     public function queueEvent(Event $event): void
     {
         $event->reset();
-        $event->setStatus('queued');
+        $event->setStatus(EventStatus::Queued->value);
         $this->update($event);
     }
 }
