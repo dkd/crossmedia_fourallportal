@@ -283,10 +283,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
      */
     protected function performExecute(SyncParameters $parameters): void
     {
-        $sync = $parameters->getSync();
-        $module = $parameters->getModule();
-
-        $activeModules = $this->getActiveModuleOrModules($module);
+        $activeModules = $this->getActiveModuleOrModules($parameters->getModule());
 
         foreach ($activeModules as $module) {
             if (!$module->verifySchemaVersion()) {
@@ -302,7 +299,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
                 continue;
             }
 
-            if ($sync && $module->getLastReceivedEventId() > 0) {
+            if ($parameters->getSync() && $module->getLastReceivedEventId() > 0) {
                 $module->setLastEventId(0);
             }
         }
@@ -405,7 +402,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
      * @param string|null $moduleName
      * @return Module[]
      */
-    protected function getActiveModuleOrModules(string $moduleName = null): array
+    protected function getActiveModuleOrModules(?string $moduleName = null): array
     {
         $activeModules = [];
         /** @var Server[] $servers */
