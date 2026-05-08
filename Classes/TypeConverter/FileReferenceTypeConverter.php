@@ -9,6 +9,7 @@ use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
 use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Domain\Model\FileReference;
+use TYPO3\CMS\Extbase\DomainObject\AbstractDomainObject;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
 use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapFactory;
 use TYPO3\CMS\Extbase\Persistence\RepositoryInterface;
@@ -68,7 +69,7 @@ class FileReferenceTypeConverter extends AbstractUuidAwareObjectTypeConverter im
     }
     $dataMap = $this->dataMapFactory->buildDataMap(get_class($this->parentObject));
 
-    $systemLanguageUid = (int)$this->parentObject->_getProperty('_languageUid');
+    $systemLanguageUid = (int)$this->parentObject->_getProperty(AbstractDomainObject::PROPERTY_LANGUAGE_UID);
     $fieldName = $dataMap->getColumnMap($this->propertyName)->getColumnName(); // GeneralUtility::camelCaseToLowerCaseUnderscored($this->propertyName);
 
     // Lookup no. 1: try to find a sys_file_reference pointing to the sys_file with remote ID=$source

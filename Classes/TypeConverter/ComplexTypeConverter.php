@@ -11,6 +11,7 @@ use Crossmedia\Fourallportal\Error\ApiException;
 use Crossmedia\Fourallportal\Mapping\MappingInterface;
 use Crossmedia\Fourallportal\Mapping\MappingRegister;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\DomainObject\AbstractDomainObject;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
 use TYPO3\CMS\Extbase\Persistence\RepositoryInterface;
 use TYPO3\CMS\Extbase\Property\PropertyMappingConfigurationInterface;
@@ -90,7 +91,7 @@ class ComplexTypeConverter extends AbstractUuidAwareObjectTypeConverter implemen
     $templateComplexType->setFieldName($originalFieldName);
     $templateComplexType->setParentUid($this->parentObject->getUid());
     $templateComplexType->setLabel($source['unit']);
-    $templateComplexType->_setProperty('_languageUid', $this->parentObject->_getProperty('_languageUid'));
+    $templateComplexType->_setProperty(AbstractDomainObject::PROPERTY_LANGUAGE_UID, $this->parentObject->_getProperty(AbstractDomainObject::PROPERTY_LANGUAGE_UID));
     $this->getRepository()->add($templateComplexType);
 
     return $templateComplexType;
