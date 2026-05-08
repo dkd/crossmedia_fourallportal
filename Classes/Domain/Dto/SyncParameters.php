@@ -28,6 +28,7 @@ class SyncParameters
     protected int $eventLimit = 0;
     private int $beganTime = 0;
     private int $eventsExecuted = 0;
+    private bool $deferredEvents = true;
 
     public function shouldContinue(): bool
     {
@@ -154,5 +155,22 @@ class SyncParameters
     {
         $this->eventLimit = $eventLimit;
         return $this;
+    }
+
+    public function withDeferredEvents(): self
+    {
+        $this->deferredEvents = true;
+        return $this;
+    }
+
+    public function withoutDeferredEvents(): self
+    {
+        $this->deferredEvents = false;
+        return $this;
+    }
+
+    public function processDeferredEvents(): bool
+    {
+        return $this->deferredEvents;
     }
 }

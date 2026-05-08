@@ -38,701 +38,704 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
 {
     use LoggerAwareTrait;
 
-  protected ResponseInterface $response;
+    protected ResponseInterface $response;
 
-  /**
-   * @param ServerRepository|null $serverRepository
-   * @param EventRepository|null $eventRepository
-   * @param ModuleRepository|null $moduleRepository
-   * @param LoggingService|null $loggingService
-   * @param PersistenceManagerInterface|null $persistenceManager
-   * @param ConnectionPool|null $connectionPool
-   * @param SchedulerTaskRepository|null $schedulerTaskRepository
-   * @param ExtensionConfiguration|null $extensionConfiguration
-   */
-  public function __construct(
-    protected ?ServerRepository            $serverRepository,
-    protected ?EventRepository             $eventRepository,
-    protected ?ModuleRepository            $moduleRepository,
-    protected ?LoggingService              $loggingService,
-    protected ?PersistenceManagerInterface $persistenceManager,
-    protected ?ConnectionPool              $connectionPool,
-    protected ?SchedulerTaskRepository     $schedulerTaskRepository,
-    protected ?ExtensionConfiguration      $extensionConfiguration)
-  {
-    /** @see .build/vendor/typo3/cms-core/Documentation/Changelog/10.0/Breaking-87193-DeprecatedFunctionalityRemoved.rst */
-    $this->response = new CollectingResponse();
-  }
-
-  /**
-   * @param ResponseInterface $response
-   * @return void
-   */
-  public function setResponse(ResponseInterface $response): void
-  {
-    $this->response = $response;
-  }
-
-  /**
-   * Replay events
-   *
-   * Replays the specified number of events, optionally only
-   * for the provided module named by connector or module name.
-   *
-   * By default, the command replays only the last event.
-   *
-   * @param int $events
-   * @param string|null $module
-   * @param string|null $objectId
-   * @return void
-   */
-  public function replay(int $events = 1, string $module = null, string $objectId = null): void
-  {
-    try {
-      $this->lock();
-    } catch (Exception) {
-      $this->response->setDescription('Cannot acquire lock - exiting without error' . PHP_EOL);
-      $this->response->send();
-      return;
+    /**
+     * @param ServerRepository|null $serverRepository
+     * @param EventRepository|null $eventRepository
+     * @param ModuleRepository|null $moduleRepository
+     * @param LoggingService|null $loggingService
+     * @param PersistenceManagerInterface|null $persistenceManager
+     * @param ConnectionPool|null $connectionPool
+     * @param SchedulerTaskRepository|null $schedulerTaskRepository
+     * @param ExtensionConfiguration|null $extensionConfiguration
+     */
+    public function __construct(
+        protected ?ServerRepository            $serverRepository,
+        protected ?EventRepository             $eventRepository,
+        protected ?ModuleRepository            $moduleRepository,
+        protected ?LoggingService              $loggingService,
+        protected ?PersistenceManagerInterface $persistenceManager,
+        protected ?ConnectionPool              $connectionPool,
+        protected ?SchedulerTaskRepository     $schedulerTaskRepository,
+        protected ?ExtensionConfiguration      $extensionConfiguration)
+    {
+        /** @see .build/vendor/typo3/cms-core/Documentation/Changelog/10.0/Breaking-87193-DeprecatedFunctionalityRemoved.rst */
+        $this->response = new CollectingResponse();
     }
-    foreach ($this->getActiveModuleOrModules($module) as $moduleObject) {
-      $eventQuery = $this->eventRepository->createQuery();
-      if (!$objectId) {
-        $eventQuery->matching(
-          $eventQuery->equals('module', $moduleObject->getUid())
-        );
-      } else {
-        $eventQuery->matching(
-          $eventQuery->logicalAnd(
-            $eventQuery->equals('module', $moduleObject->getUid()),
-            $eventQuery->equals('object_id', $objectId)
-          )
-        );
-      }
-      $eventQuery->setLimit($events);
-      $eventQuery->setOrderings(['event_id' => 'DESC']);
-      foreach ($eventQuery->execute() as $event) {
+
+    /**
+     * @param ResponseInterface $response
+     * @return void
+     */
+    public function setResponse(ResponseInterface $response): void
+    {
+        $this->response = $response;
+    }
+
+    /**
+     * Replay events
+     *
+     * Replays the specified number of events, optionally only
+     * for the provided module named by connector or module name.
+     *
+     * By default, the command replays only the last event.
+     *
+     * @param int $events
+     * @param string|null $module
+     * @param string|null $objectId
+     * @return void
+     */
+    public function replay(int $events = 1, string $module = null, string $objectId = null): void
+    {
+        try {
+            $this->lock();
+        } catch (Exception) {
+            $this->response->setDescription('Cannot acquire lock - exiting without error' . PHP_EOL);
+            $this->response->send();
+            return;
+        }
+        foreach ($this->getActiveModuleOrModules($module) as $moduleObject) {
+            $eventQuery = $this->eventRepository->createQuery();
+            if (!$objectId) {
+                $eventQuery->matching(
+                    $eventQuery->equals('module', $moduleObject->getUid())
+                );
+            } else {
+                $eventQuery->matching(
+                    $eventQuery->logicalAnd(
+                        $eventQuery->equals('module', $moduleObject->getUid()),
+                        $eventQuery->equals('object_id', $objectId)
+                    )
+                );
+            }
+            $eventQuery->setLimit($events);
+            $eventQuery->setOrderings(['event_id' => 'DESC']);
+            foreach ($eventQuery->execute() as $event) {
+                $event->setStatus(EventStatus::Pending->value);
+                $this->eventRepository->update($event);
+                $this->persistenceManager->persistAll();
+                try {
+                    $this->processEvent($event);
+                } catch (\Throwable $throwable) {
+                    $this->handleEventException(
+                        $event,
+                        '[Event replay] Execution failed with ' . $throwable->getMessage()
+                    );
+                }
+            }
+        }
+        $this->unlock();
+    }
+
+    /**
+     * @param SyncParameters $parameters
+     * @return void
+     * @throws IllegalObjectTypeException
+     * @throws InvalidQueryException
+     * @throws UnknownObjectException
+     * @throws \Doctrine\DBAL\Exception
+     */
+    public function sync(SyncParameters $parameters): void
+    {
+        try {
+            $parameters->startExecution();
+            if ($parameters->getSync()) {
+                $this->performSync($parameters);
+            }
+            if ($parameters->getExecute()) {
+                $this->performExecute($parameters);
+            }
+        } catch (ApiException) {
+            $this->unlock();
+        }
+    }
+
+    /**
+     * @param SyncParameters $parameters
+     * @return void
+     * @throws ApiException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     * @throws \Doctrine\DBAL\Exception
+     */
+    protected function performSync(SyncParameters $parameters): void
+    {
+        $fullSync = $parameters->getFullSync();
+        $module = $parameters->getModule();
+        $exclude = $parameters->getExclude();
+
+        $activeModules = $this->getActiveModuleOrModules($module);
+
+        $deferredEvents = [];
+        foreach ($this->eventRepository->findByStatus(EventStatus::Deferred->value) as $event) {
+            if (in_array($event->getModule()->getModuleName(), $exclude)) {
+                continue;
+            }
+            if (!in_array($event->getModule(), $activeModules)) {
+                continue;
+            }
+            $deferredEvents[$event->getModule()->getModuleName()][$event->getObjectId()][] = $event;
+        }
+        if ($fullSync && !$module && empty($exclude)) {
+            $tableName = "tx_fourallportal_domain_model_event";
+            $connection = $this->connectionPool->getQueryBuilderForTable($tableName)->getConnection();
+            $dbPlatform = $connection->getDatabasePlatform();
+            $connection->beginTransaction();
+            try {
+                $connection->executeQuery('SET FOREIGN_KEY_CHECKS=0');
+                $q = $dbPlatform->getTruncateTableSql($tableName);
+                $connection->executeStatement($q);
+                $connection->executeQuery('SET FOREIGN_KEY_CHECKS=1');
+                $connection->commit();
+            } catch (\Exception $e) {
+                $this->logger?->error('Truncate of table "' . $tableName . '" failed with exception: ' . $e->getMessage());
+                $connection->rollback();
+            }
+        }
+
+        foreach ($activeModules as $module) {
+            if (!$module->verifySchemaVersion()) {
+                $message = sprintf(
+                    'Module "%s": Remote config hash "%s" does not match local "%s" - skipping SYNC',
+                    $module->getModuleName(),
+                    $module->getConnectorConfiguration()['config_hash'],
+                    $module->getConfigHash()
+                );
+                $this->response->error($message);
+                $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
+                continue;
+            }
+
+            $client = $module->getServer()->getClient();
+            if (empty($module->getModuleName())) {
+                $connectorConfig = $client->getConnectorConfig($module->getConnectorName());
+                $module->setModuleName($connectorConfig['moduleConfig']['module_name']);
+            }
+
+            if (in_array($module->getModuleName(), $exclude)) {
+                continue;
+            }
+
+            if ($fullSync) {
+                $module->setLastReceivedEventId(1);
+                $moduleEvents = $this->eventRepository->findByModule($module);
+                foreach ($moduleEvents as $moduleEvent) {
+                    $this->eventRepository->remove($moduleEvent);
+                }
+                $this->moduleRepository->update($module);
+                $this->persistenceManager->persistAll();
+            }
+
+            $lastEventId = $module->getLastReceivedEventId();
+            $results = $this->readAllPendingEvents($client, $module->getConnectorName(), $module->getLastReceivedEventId());
+            $queuedEventsForModule = [];
+            foreach ($results as $result) {
+                $this->response->setDescription('Receiving event ID "' . $result['id'] . '" from connector "' . $module->getConnectorName() . '"' . PHP_EOL);
+                if (!$result['id']) {
+                    $this->response->setDescription(var_export($result, true) . PHP_EOL);
+                }
+                $this->response->send();
+                if (isset($queuedEventsForModule[$result['object_id']])) {
+                    $this->response->setDescription('** Ignoring duplicate older event: ' . $queuedEventsForModule[$result['object_id']]['id'] . PHP_EOL);
+                    $this->response->send();
+                }
+                if (isset($deferredEvents[$result['module_name']][$result['object_id']])) {
+                    foreach ($deferredEvents[$result['module_name']][$result['object_id']] as $deferredEvent) {
+                        $this->eventRepository->remove($deferredEvent);
+                        $this->response->setDescription('** Removing older deferred event: ' . $deferredEvent->getEventId() . PHP_EOL);
+                        $this->response->send();
+                    }
+                }
+                $lastEventId = max($lastEventId, $result['id']);
+                $queuedEventsForModule[$result['object_id']] = $result;
+            }
+            foreach ($queuedEventsForModule as $result) {
+                $this->queueEvent($module, $result);
+            }
+
+            $module->setLastReceivedEventId($lastEventId);
+            $this->moduleRepository->update($module);
+        }
+
+        $this->persistenceManager->persistAll();
+    }
+
+    /**
+     * @param SyncParameters $parameters
+     * @return void
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    public function execute(SyncParameters $parameters): void
+    {
+        $this->performExecute($parameters);
+    }
+
+    /**
+     * @param SyncParameters $parameters
+     * @return void
+     * @throws ApiException
+     * @throws IllegalObjectTypeException
+     * @throws InvalidQueryException
+     * @throws UnknownObjectException
+     * @throws \Doctrine\DBAL\Exception
+     */
+    protected function performExecute(SyncParameters $parameters): void
+    {
+        $sync = $parameters->getSync();
+        $module = $parameters->getModule();
+
+        $activeModules = $this->getActiveModuleOrModules($module);
+
+        foreach ($activeModules as $module) {
+            if (!$module->verifySchemaVersion()) {
+                $message = sprintf(
+                    'Module "%s": Remote config hash "%s" does not match local "%s"',
+                    $module->getModuleName(),
+                    $module->getConnectorConfiguration()['config_hash'],
+                    $module->getConfigHash()
+                );
+                $this->response->error($message);
+                $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
+                $parameters->excludeModule($module->getModuleName());
+                continue;
+            }
+
+            if ($sync && $module->getLastReceivedEventId() > 0) {
+                $module->setLastEventId(0);
+            }
+        }
+
+        $maxEvents = min($parameters->getEventLimit(), 100);
+        if ($maxEvents === 0) {
+            $maxEvents = 100;
+        }
+        $maxDeferredEvents = floor($maxEvents / 5);
+        while ($parameters->shouldContinue()) {
+            if ($parameters->processDeferredEvents()) {
+                if ($maxDeferredEvents > 0) {
+                    while ($parameters->shouldContinue() && ($events = $this->eventRepository->findDeferred($maxEvents)) && $events->count() > 0) {
+                        $this->response
+                            ->setDescription('Processing batch of ' . $events->count() . ' deferred events...' . PHP_EOL)
+                            ->send();
+                        $this->processEvents($parameters, $events);
+                    }
+                }
+            }
+
+            while ($parameters->shouldContinue() && ($events = $this->eventRepository->findByStatus(EventStatus::Pending->value, $maxEvents, false)) && $events->count() > 0) {
+                $this->response
+                    ->setDescription('Processing batch of ' . $events->count() . ' pending events...' . PHP_EOL)
+                    ->send();
+                $this->processEvents($parameters, $events);
+            }
+            if ($events && $events->count() === 0) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * @param SyncParameters $parameters
+     * @param QueryResultInterface $events
+     * @return void
+     */
+    protected function processEvents(SyncParameters $parameters, QueryResultInterface $events): void
+    {
+        /** @var Event[] $events */
+        foreach ($events as $event) {
+            if (!$parameters->shouldContinue()) {
+                return;
+            }
+            if ($parameters->isModuleExcluded($event->getModule()->getModuleName())) {
+                continue;
+            }
+
+            try {
+                $this->processEvent($event, true, $parameters);
+            } catch (\Throwable $throwable) {
+                $this->handleEventException(
+                    $event,
+                    'Event execution failed with ' . $throwable->getMessage()
+                );
+            }
+        }
+
+        // Trigger post-execution hook
+        if (is_array($this->extensionConfiguration->get('fourallportal')['postEventExecution'] ?? null)) {
+            foreach ($this->extensionConfiguration->get('fourallportal')['postEventExecution'] as $postExecutionHookClass) {
+                GeneralUtility::makeInstance($postExecutionHookClass)->postEventExecution($events->toArray());
+            }
+        }
+    }
+
+    /**
+     * @param ApiClient $client
+     * @param string $connectorName
+     * @param int $lastEventId
+     * @return array
+     * @throws ApiException
+     */
+    protected function readAllPendingEvents(ApiClient $client, string $connectorName, int $lastEventId = 0): array
+    {
+        // Determine delay between 1,000 event batches: if $lastEventId is zero this causes the getEvents
+        // call to recreate the event queue on the remote service. If this code then loops and continuously
+        // calls getEvents, it is possible to reach a state where zero events are returned because the event
+        // queue on the remote service is not fully recreated. Subsequent calls to getEvents then returns
+        // additional events, causing problems with the local queue's consistency.
+        // Introducing a wait between each batch when $lastEventId is zero gives the remote service enough
+        // time to fully recreate the event queue, and the loop then won't exit until every event is recreated
+        // and fetched.
+        $sleep = ($lastEventId === 0);
+        $allEvents = [];
+        while (($events = $client->getEvents($connectorName, $lastEventId)) && count($events)) {
+            foreach ($events as $event) {
+                $lastEventId = $event['id'];
+                $allEvents[$lastEventId] = $event;
+            }
+            if ($sleep) {
+                sleep(10);
+            }
+        }
+        return $allEvents;
+    }
+
+    /**
+     * @param string|null $moduleName
+     * @return Module[]
+     */
+    protected function getActiveModuleOrModules(string $moduleName = null): array
+    {
+        $activeModules = [];
+        /** @var Server[] $servers */
+        $servers = $this->serverRepository->findBy(['active' => true]);
+        foreach ($servers as $server) {
+            if (!$server->isActive()) {
+                continue;
+            }
+            /** @var Module[] $modules */
+            $modules = $server->getModules();
+            foreach ($modules as $configuredModule) {
+                if ($moduleName && ($configuredModule->getModuleName() !== $moduleName && $configuredModule->getConnectorName() !== $moduleName)) {
+                    continue;
+                }
+                $activeModules[] = $configuredModule;
+            }
+        }
+        return $activeModules;
+    }
+
+    /**
+     * @param Module $module
+     * @param array $result
+     * @return Event
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     */
+    protected function queueEvent(Module $module, array $result): Event
+    {
+        $event = $this->eventRepository->findOneByModuleAndEventId($module, (int)$result['id']);
+        $new = false;
+        if (!$event) {
+            $event = new Event();
+            $new = true;
+        } elseif ($event->getStatus() === EventStatus::Claimed->value) {
+            return $event;
+        }
+
+        $event->setModule($module);
+        $event->setCrdate(strtotime($result['mod_time']));
+        $event->setEventId($result['id']);
+        $event->setObjectId($result['object_id']);
+        $event->setEventType(Event::resolveEventType($result['event_type']));
         $event->setStatus(EventStatus::Pending->value);
+
+        if ($new) {
+            $this->eventRepository->add($event);
+        } else {
+            $this->eventRepository->update($event);
+        }
+
+        return $event;
+    }
+
+    /**
+     * Locks the sync to avoid multiple processes
+     *
+     * NB: Cannot use TYPO3 LockFactory here, will not consistently create locks
+     * on .docker setups.
+     *
+     * @return bool
+     * @throws LockCreateException
+     */
+    public function lock(): bool
+    {
+        $path = $this->getLockFilePath();
+        if (file_exists($path)) {
+            throw new LockCreateException('Cannot acquire lock for 4AP sync', 7120480889);
+        }
+        return touch($path);
+    }
+
+    /**
+     * Unlock the sync after process is complete
+     *
+     * NB: Cannot use TYPO3 LockFactory here, will not consistently create locks
+     * on .docker setups.
+     *
+     * @param int $requiredAge Number of seconds, required minimum age of the lock file before removal will be allowed.
+     * @return bool
+     * @throws \Doctrine\DBAL\Exception
+     */
+    public function unlock(int $requiredAge = 0): bool
+    {
+        $lockFile = $this->getLockFilePath();
+        if (!file_exists($lockFile)) {
+            return false;
+        }
+        $age = time() - filemtime($lockFile);
+        if ($age >= $requiredAge) {
+            $this->resetSchedulerTask($requiredAge);
+            return unlink($lockFile);
+        }
+        $this->response->setDescription(
+            sprintf(
+                'Lock file was not removed; it is younger than the required age for removal. %d seconds too young.',
+                $requiredAge - $age
+            )
+        );
+        $this->response->send();
+        return false;
+    }
+
+    /**
+     * @param $requiredAge
+     * @return void
+     * @throws \Doctrine\DBAL\Exception
+     */
+    protected function resetSchedulerTask($requiredAge): void
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
+        $result = $queryBuilder->select('uid')
+            ->from('tx_scheduler_task')
+            ->where(
+                $queryBuilder->expr()->eq('deleted', 0)
+            )->executeQuery();
+        $deadAge = time() - $requiredAge;
+        $taskRecords = $result->fetchAllAssociative();
+
+        foreach ($taskRecords as $taskRecord) {
+            $task = $this->schedulerTaskRepository->findByUid($taskRecord['uid']);
+            if ($this->schedulerTaskRepository->isTaskMarkedAsRunning($task) &&
+                $task instanceof ExecuteSchedulableCommandTask &&
+                $task->getCommandIdentifier() === 'fourallportal:fourallportal:sync' &&
+                $task->getExecution()->getStart() <= $deadAge) {
+                $this->schedulerTaskRepository->removeAllRegisteredExecutionsForTask($task);
+                $task->setRunOnNextCronJob(true);
+                $task->save();
+            }
+        }
+    }
+
+
+    /**
+     * @return string
+     */
+    protected function getLockFilePath(): string
+    {
+        return rtrim(Environment::getVarPath(), '/') . '/lock/lock_4ap_sync.lock';
+    }
+
+    /**
+     * Execute a single event
+     *
+     * @param Event $event
+     * @param bool $updateEventId
+     * @param SyncParameters|null $parameters
+     * @return bool|null
+     * @throws ApiException
+     * @throws ExtensionConfigurationExtensionNotConfiguredException
+     * @throws ExtensionConfigurationPathDoesNotExistException
+     * @throws IllegalObjectTypeException
+     * @throws UnknownObjectException
+     * @throws \Doctrine\DBAL\Exception
+     * @throws \Throwable
+     */
+    public function processEvent(
+        Event           &$event,
+        bool            $updateEventId = true,
+        ?SyncParameters $parameters = null
+    ): bool|null
+    {
+        if ($event->isProcessing()) {
+            return null;
+        }
+
+        $logPrefix = '[Event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '"] ';
+
+        $this->response
+            ->setDescription(
+                $logPrefix . 'Processing with status ' . $event->getStatus() . ' - ' .
+                $event->getEventType() . ' ' . $event->getObjectId() . PHP_EOL
+            )
+            ->send();
+
+        $event->setProcessing(true);
         $this->eventRepository->update($event);
         $this->persistenceManager->persistAll();
+        $client = $event->getModule()->getServer()->getClient();
         try {
-            $this->processEvent($event);
-        } catch (\Throwable $throwable) {
-            $this->handleEventException(
+            $mapper = $event->getModule()->getMapper();
+            $responseData = [];
+            if ($event->getEventType() !== 'delete') {
+                if (empty($event->getBeanData())) {
+                    $responseData = $client->getBeans(
+                        [
+                            $event->getObjectId()
+                        ],
+                        $event->getModule()->getConnectorName()
+                    );
+                } else {
+                    $responseData = ['result' => [$event->getBeanData()]];
+                }
+            }
+
+            // Update the Module's last recorded event ID, but only if the event ID was higher. This allows
+            // deferred events to execute without lowering the last recorded event ID which would cause
+            // duplicate event processing on the next run.
+            if ($updateEventId) {
+                $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
+            }
+            $this->eventRepository->update($event);
+            $this->persistenceManager->persistAll();
+            if ($mapper->import($responseData, $event)) {
+                // This method returns TRUE if any property caused problems that were also logged. When this
+                // happens, throw a deferral exception and let the catch statement below handle deferral.
+                throw new DeferralException(
+                    'Property mapping problems occurred and have been logged - the object was partially mapped and will be retried',
+                    1528129226
+                );
+            }
+            $event->setRetries(0);
+            $event->setStatus(EventStatus::Claimed->value);
+            $event->setMessage('Successfully executed - no additional output available');
+            $this->loggingService->logEventActivity($event, 'Event was executed');
+        } catch (DeferralException $error) {
+            // The system was unable to map properties, most likely because of an unresolvable relation.
+            // Skip the event for now; process it later.
+            $skippedUntil = $event->getSkipUntil();
+            $ttl = (int)($this->extensionConfiguration->get('fourallportal')['eventDeferralTTL'] ?? 86400);
+            $now = time();
+            $event->setMessage($error->getMessage() . ' (code: ' . $error->getCode() . ')');
+            $event->setStatus(EventStatus::Deferred->value);
+            $event->setRetries($event->getRetries() + 1);
+            // Next retry time: current time plus, plus number of retries times half an hour, plus/minus 600 seconds to
+            // stagger event execution and prevent the bulk from executing at the same time if many deferrals happen
+            // during a full sync. So, deferral waiting time increases incrementally from no less than 20 minutes to
+            // around 10 hours maximum.
+            $event->setNextRetry($now + ((min($event->getRetries(), 20)) * 1800) + rand(-600, 600));
+            if ($skippedUntil === 0) {
+                // Assign a TTL, after which is the event still causes a problem it gets marked as failed.
+                $skippedUntil = $now + $ttl;
+                $event->setSkipUntil($skippedUntil);
+            } elseif ($skippedUntil < $now) {
+                // Event has been deferred too long and still causes an error. Mark it as failed (and reset the
+                // deferral TTL so that deferral is again allowed, should the event be retried via BE module).
+                $event->setSkipUntil(0);
+                $event->setRetries(0);
+                $event->setStatus(EventStatus::Failed->value);
+            }
+            $this->loggingService->logEventActivity($event, 'Event was deferred', LogLevel::WARNING);
+        } catch (\Throwable $exception) {
+            $event->setStatus(EventStatus::Failed->value);
+            $event->setRetries(0);
+            $event->setMessage($exception->getMessage() . ' (code: ' . $exception->getCode() . ')' . $exception->getFile() . ':' . $exception->getLine());
+            if ($updateEventId) {
+                $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
+            }
+
+            $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), LogLevel::WARNING);
+            $this->eventRepository->update($event);
+            try {
+                $this->persistenceManager->persistAll();
+            } catch (\Throwable $exception) {
+                $this->loggingService->logEventActivity(
+                    $event,
+                    'Changes not stored due to system errors: ' . $exception->getMessage(),
+                    LogLevel::ERROR
+                );
+                $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
+            }
+            $this->response
+                ->setDescription(
+                    $logPrefix . 'Processing failed. See log or event for details' . PHP_EOL
+                )
+                ->send();
+            throw $exception;
+        }
+        $responseMetadata = $client->getLastResponse();
+
+        $event->setHeaders($responseMetadata['headers']);
+        if (($responseMetadata['url'] ?? null)) {
+            $event->setUrl($responseMetadata['url']);
+        }
+        if (($responseMetadata['response'] ?? null)) {
+            $event->setResponse($responseMetadata['response']);
+        }
+        if (($responseMetadata['payload'] ?? null)) {
+            $event->setPayload($responseMetadata['payload']);
+        }
+        $event->setProcessing(false);
+        $this->eventRepository->update($event);
+        try {
+            $this->persistenceManager->persistAll();
+        } catch (Exception $exception) {
+            $this->loggingService->logEventActivity(
                 $event,
-                '[Event replay] Execution failed with ' . $throwable->getMessage()
+                'Changes not stored due to system errors: ' . $exception->getMessage(),
+                LogLevel::ERROR
             );
+            $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
+            throw $exception;
         }
-      }
-    }
-    $this->unlock();
-  }
-
-  /**
-   * @param SyncParameters $parameters
-   * @return void
-   * @throws IllegalObjectTypeException
-   * @throws InvalidQueryException
-   * @throws UnknownObjectException
-   * @throws \Doctrine\DBAL\Exception
-   */
-  public function sync(SyncParameters $parameters): void
-  {
-    try {
-      $parameters->startExecution();
-      if ($parameters->getSync()) {
-        $this->performSync($parameters);
-      }
-      if ($parameters->getExecute()) {
-        $this->performExecute($parameters);
-      }
-    } catch (ApiException) {
-      $this->unlock();
-    }
-  }
-
-  /**
-   * @param SyncParameters $parameters
-   * @return void
-   * @throws ApiException
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   * @throws \Doctrine\DBAL\Exception
-   */
-  protected function performSync(SyncParameters $parameters): void
-  {
-    $fullSync = $parameters->getFullSync();
-    $module = $parameters->getModule();
-    $exclude = $parameters->getExclude();
-
-    $activeModules = $this->getActiveModuleOrModules($module);
-
-    $deferredEvents = [];
-    foreach ($this->eventRepository->findByStatus(EventStatus::Deferred->value) as $event) {
-      if (in_array($event->getModule()->getModuleName(), $exclude)) {
-        continue;
-      }
-      if (!in_array($event->getModule(), $activeModules)) {
-        continue;
-      }
-      $deferredEvents[$event->getModule()->getModuleName()][$event->getObjectId()][] = $event;
-    }
-    if ($fullSync && !$module && empty($exclude)) {
-      $tableName = "tx_fourallportal_domain_model_event";
-      $connection = $this->connectionPool->getQueryBuilderForTable($tableName)->getConnection();
-      $dbPlatform = $connection->getDatabasePlatform();
-      $connection->beginTransaction();
-      try {
-        $connection->executeQuery('SET FOREIGN_KEY_CHECKS=0');
-        $q = $dbPlatform->getTruncateTableSql($tableName);
-        $connection->executeStatement($q);
-        $connection->executeQuery('SET FOREIGN_KEY_CHECKS=1');
-        $connection->commit();
-      } catch (\Exception $e) {
-        $this->logger?->error('Truncate of table "' . $tableName . '" failed with exception: ' . $e->getMessage());
-        $connection->rollback();
-      }
+        $parameters?->countExecutedEvent();
+        return $event->getStatus() === EventStatus::Claimed->value;
     }
 
-    foreach ($activeModules as $module) {
-      if (!$module->verifySchemaVersion()) {
-        $message = sprintf(
-            'Module "%s": Remote config hash "%s" does not match local "%s" - skipping SYNC',
-            $module->getModuleName(),
-            $module->getConnectorConfiguration()['config_hash'],
-            $module->getConfigHash()
-        );
-        $this->response->error($message);
-        $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
-        continue;
-      }
-
-      $client = $module->getServer()->getClient();
-      if (empty($module->getModuleName())) {
-        $connectorConfig = $client->getConnectorConfig($module->getConnectorName());
-        $module->setModuleName($connectorConfig['moduleConfig']['module_name']);
-      }
-
-      if (in_array($module->getModuleName(), $exclude)) {
-        continue;
-      }
-
-      if ($fullSync) {
-        $module->setLastReceivedEventId(1);
-        $moduleEvents = $this->eventRepository->findByModule($module);
-        foreach ($moduleEvents as $moduleEvent) {
-          $this->eventRepository->remove($moduleEvent);
-        }
-        $this->moduleRepository->update($module);
-        $this->persistenceManager->persistAll();
-      }
-
-      $lastEventId = $module->getLastReceivedEventId();
-      $results = $this->readAllPendingEvents($client, $module->getConnectorName(), $module->getLastReceivedEventId());
-      $queuedEventsForModule = [];
-      foreach ($results as $result) {
-        $this->response->setDescription('Receiving event ID "' . $result['id'] . '" from connector "' . $module->getConnectorName() . '"' . PHP_EOL);
-        if (!$result['id']) {
-          $this->response->setDescription(var_export($result, true) . PHP_EOL);
-        }
-        $this->response->send();
-        if (isset($queuedEventsForModule[$result['object_id']])) {
-          $this->response->setDescription('** Ignoring duplicate older event: ' . $queuedEventsForModule[$result['object_id']]['id'] . PHP_EOL);
-          $this->response->send();
-        }
-        if (isset($deferredEvents[$result['module_name']][$result['object_id']])) {
-          foreach ($deferredEvents[$result['module_name']][$result['object_id']] as $deferredEvent) {
-            $this->eventRepository->remove($deferredEvent);
-            $this->response->setDescription('** Removing older deferred event: ' . $deferredEvent->getEventId() . PHP_EOL);
-            $this->response->send();
-          }
-        }
-        $lastEventId = max($lastEventId, $result['id']);
-        $queuedEventsForModule[$result['object_id']] = $result;
-      }
-      foreach ($queuedEventsForModule as $result) {
-        $this->queueEvent($module, $result);
-      }
-
-      $module->setLastReceivedEventId($lastEventId);
-      $this->moduleRepository->update($module);
-    }
-
-    $this->persistenceManager->persistAll();
-  }
-
-  /**
-   * @param SyncParameters $parameters
-   * @return void
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  public function execute(SyncParameters $parameters): void
-  {
-    $this->performExecute($parameters);
-  }
-
-  /**
-   * @param SyncParameters $parameters
-   * @return void
-   * @throws ApiException
-   * @throws IllegalObjectTypeException
-   * @throws InvalidQueryException
-   * @throws UnknownObjectException
-   * @throws \Doctrine\DBAL\Exception
-   */
-  protected function performExecute(SyncParameters $parameters): void
-  {
-    $sync = $parameters->getSync();
-    $module = $parameters->getModule();
-
-    $activeModules = $this->getActiveModuleOrModules($module);
-
-    foreach ($activeModules as $module) {
-      if (!$module->verifySchemaVersion()) {
-        $message = sprintf(
-          'Module "%s": Remote config hash "%s" does not match local "%s"',
-          $module->getModuleName(),
-          $module->getConnectorConfiguration()['config_hash'],
-          $module->getConfigHash()
-        );
-        $this->response->error($message);
-        $this->loggingService->logSchemaActivity($message, LogLevel::CRITICAL);
-        $parameters->excludeModule($module->getModuleName());
-        continue;
-      }
-
-      if ($sync && $module->getLastReceivedEventId() > 0) {
-        $module->setLastEventId(0);
-      }
-    }
-
-    $maxEvents = min($parameters->getEventLimit(), 100);
-    if ($maxEvents === 0) {
-      $maxEvents = 100;
-    }
-    $maxDeferredEvents = floor($maxEvents / 5);
-    while ($parameters->shouldContinue()) {
-      if ($maxDeferredEvents > 0) {
-        while ($parameters->shouldContinue() && ($events = $this->eventRepository->findDeferred($maxEvents)) && $events->count() > 0) {
-          $this->response
-              ->setDescription('Processing batch of ' . $events->count() . ' deferred events...' . PHP_EOL)
-              ->send();
-          $this->processEvents($parameters, $events);
-        }
-      }
-
-      while ($parameters->shouldContinue() && ($events = $this->eventRepository->findByStatus(EventStatus::Pending->value, $maxEvents, false)) && $events->count() > 0) {
-          $this->response
-              ->setDescription('Processing batch of ' . $events->count() . ' pending events...' . PHP_EOL)
-              ->send();
-        $this->processEvents($parameters, $events);
-      }
-      if ($events && $events->count() === 0) {
-        break;
-      }
-    }
-  }
-
-  /**
-   * @param SyncParameters $parameters
-   * @param QueryResultInterface $events
-   * @return void
-   */
-  protected function processEvents(SyncParameters $parameters, QueryResultInterface $events): void
-  {
-    /** @var Event[] $events */
-    foreach ($events as $event) {
-      if (!$parameters->shouldContinue()) {
-        return;
-      }
-      if ($parameters->isModuleExcluded($event->getModule()->getModuleName())) {
-        continue;
-      }
-
-      try {
-          $this->processEvent($event, true, $parameters);
-      } catch (\Throwable $throwable) {
-          $this->handleEventException(
-              $event,
-              'Event execution failed with ' . $throwable->getMessage()
-          );
-      }
-    }
-
-    // Trigger post-execution hook
-    if (is_array($this->extensionConfiguration->get('fourallportal')['postEventExecution'] ?? null)) {
-      foreach ($this->extensionConfiguration->get('fourallportal')['postEventExecution'] as $postExecutionHookClass) {
-        GeneralUtility::makeInstance($postExecutionHookClass)->postEventExecution($events->toArray());
-      }
-    }
-  }
-
-  /**
-   * @param ApiClient $client
-   * @param string $connectorName
-   * @param int $lastEventId
-   * @return array
-   * @throws ApiException
-   */
-  protected function readAllPendingEvents(ApiClient $client, string $connectorName, int $lastEventId = 0): array
-  {
-    // Determine delay between 1,000 event batches: if $lastEventId is zero this causes the getEvents
-    // call to recreate the event queue on the remote service. If this code then loops and continuously
-    // calls getEvents, it is possible to reach a state where zero events are returned because the event
-    // queue on the remote service is not fully recreated. Subsequent calls to getEvents then returns
-    // additional events, causing problems with the local queue's consistency.
-    // Introducing a wait between each batch when $lastEventId is zero gives the remote service enough
-    // time to fully recreate the event queue, and the loop then won't exit until every event is recreated
-    // and fetched.
-    $sleep = ($lastEventId === 0);
-    $allEvents = [];
-    while (($events = $client->getEvents($connectorName, $lastEventId)) && count($events)) {
-      foreach ($events as $event) {
-        $lastEventId = $event['id'];
-        $allEvents[$lastEventId] = $event;
-      }
-      if ($sleep) {
-        sleep(10);
-      }
-    }
-    return $allEvents;
-  }
-
-  /**
-   * @param string|null $moduleName
-   * @return Module[]
-   */
-  protected function getActiveModuleOrModules(string $moduleName = null): array
-  {
-    $activeModules = [];
-    /** @var Server[] $servers */
-    $servers = $this->serverRepository->findBy(['active' => true]);
-    foreach ($servers as $server) {
-      if (!$server->isActive()) {
-        continue;
-      }
-      /** @var Module[] $modules */
-      $modules = $server->getModules();
-      foreach ($modules as $configuredModule) {
-        if ($moduleName && ($configuredModule->getModuleName() !== $moduleName && $configuredModule->getConnectorName() !== $moduleName)) {
-          continue;
-        }
-        $activeModules[] = $configuredModule;
-      }
-    }
-    return $activeModules;
-  }
-
-  /**
-   * @param Module $module
-   * @param array $result
-   * @return Event
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   */
-  protected function queueEvent(Module $module, array $result): Event
-  {
-    $event = $this->eventRepository->findOneByModuleAndEventId($module, (int)$result['id']);
-    $new = false;
-    if (!$event) {
-      $event = new Event();
-      $new = true;
-    } elseif ($event->getStatus() === EventStatus::Claimed->value) {
-      return $event;
-    }
-
-    $event->setModule($module);
-    $event->setCrdate(strtotime($result['mod_time']));
-    $event->setEventId($result['id']);
-    $event->setObjectId($result['object_id']);
-    $event->setEventType(Event::resolveEventType($result['event_type']));
-    $event->setStatus(EventStatus::Pending->value);
-
-    if ($new) {
-      $this->eventRepository->add($event);
-    } else {
-      $this->eventRepository->update($event);
-    }
-
-    return $event;
-  }
-
-  /**
-   * Locks the sync to avoid multiple processes
-   *
-   * NB: Cannot use TYPO3 LockFactory here, will not consistently create locks
-   * on .docker setups.
-   *
-   * @return bool
-   * @throws LockCreateException
-   */
-  public function lock(): bool
-  {
-    $path = $this->getLockFilePath();
-    if (file_exists($path)) {
-      throw new LockCreateException('Cannot acquire lock for 4AP sync', 7120480889);
-    }
-    return touch($path);
-  }
-
-  /**
-   * Unlock the sync after process is complete
-   *
-   * NB: Cannot use TYPO3 LockFactory here, will not consistently create locks
-   * on .docker setups.
-   *
-   * @param int $requiredAge Number of seconds, required minimum age of the lock file before removal will be allowed.
-   * @return bool
-   * @throws \Doctrine\DBAL\Exception
-   */
-  public function unlock(int $requiredAge = 0): bool
-  {
-    $lockFile = $this->getLockFilePath();
-    if (!file_exists($lockFile)) {
-      return false;
-    }
-    $age = time() - filemtime($lockFile);
-    if ($age >= $requiredAge) {
-      $this->resetSchedulerTask($requiredAge);
-      return unlink($lockFile);
-    }
-    $this->response->setDescription(
-      sprintf(
-        'Lock file was not removed; it is younger than the required age for removal. %d seconds too young.',
-        $requiredAge - $age
-      )
-    );
-    $this->response->send();
-    return false;
-  }
-
-  /**
-   * @param $requiredAge
-   * @return void
-   * @throws \Doctrine\DBAL\Exception
-   */
-  protected function resetSchedulerTask($requiredAge): void
-  {
-    $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
-    $result = $queryBuilder->select('uid')
-      ->from('tx_scheduler_task')
-      ->where(
-        $queryBuilder->expr()->eq('deleted', 0)
-      )->executeQuery();
-    $deadAge = time() - $requiredAge;
-    $taskRecords = $result->fetchAllAssociative();
-
-    foreach($taskRecords as $taskRecord) {
-      $task = $this->schedulerTaskRepository->findByUid($taskRecord['uid']);
-      if ($this->schedulerTaskRepository->isTaskMarkedAsRunning($task) &&
-        $task instanceof ExecuteSchedulableCommandTask &&
-        $task->getCommandIdentifier() === 'fourallportal:fourallportal:sync' &&
-        $task->getExecution()->getStart() <= $deadAge) {
-        $this->schedulerTaskRepository->removeAllRegisteredExecutionsForTask($task);
-        $task->setRunOnNextCronJob(true);
-        $task->save();
-      }
-    }
-  }
-
-
-  /**
-   * @return string
-   */
-  protected function getLockFilePath(): string
-  {
-    return rtrim(Environment::getVarPath(), '/') . '/lock/lock_4ap_sync.lock';
-  }
-
-  /**
-   * Execute a single event
-   *
-   * @param Event $event
-   * @param bool $updateEventId
-   * @param SyncParameters|null $parameters
-   * @return bool|null
-   * @throws ApiException
-   * @throws ExtensionConfigurationExtensionNotConfiguredException
-   * @throws ExtensionConfigurationPathDoesNotExistException
-   * @throws IllegalObjectTypeException
-   * @throws UnknownObjectException
-   * @throws \Doctrine\DBAL\Exception
-   * @throws \Throwable
-   */
-  public function processEvent(
-      Event &$event,
-      bool $updateEventId = true,
-      ?SyncParameters $parameters = null
-  ): bool|null {
-    if ($event->isProcessing()) {
-      return null;
-    }
-
-    $logPrefix = '[Event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '"] ';
-
-    $this->response
-        ->setDescription(
-            $logPrefix . 'Processing with status ' . $event->getStatus() . ' - ' .
-            $event->getEventType() . ' ' . $event->getObjectId() . PHP_EOL
-        )
-        ->send();
-
-    $event->setProcessing(true);
-    $this->eventRepository->update($event);
-    $this->persistenceManager->persistAll();
-    $client = $event->getModule()->getServer()->getClient();
-    try {
-      $mapper = $event->getModule()->getMapper();
-      $responseData = [];
-      if ($event->getEventType() !== 'delete') {
-        if (empty($event->getBeanData())) {
-          $responseData = $client->getBeans(
-            [
-              $event->getObjectId()
-            ],
-            $event->getModule()->getConnectorName()
-          );
-        } else {
-          $responseData = ['result' => [$event->getBeanData()]];
-        }
-      }
-
-      // Update the Module's last recorded event ID, but only if the event ID was higher. This allows
-      // deferred events to execute without lowering the last recorded event ID which would cause
-      // duplicate event processing on the next run.
-      if ($updateEventId) {
-        $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
-      }
-      $this->eventRepository->update($event);
-      $this->persistenceManager->persistAll();
-      if ($mapper->import($responseData, $event)) {
-        // This method returns TRUE if any property caused problems that were also logged. When this
-        // happens, throw a deferral exception and let the catch statement below handle deferral.
-        throw new DeferralException(
-          'Property mapping problems occurred and have been logged - the object was partially mapped and will be retried',
-          1528129226
-        );
-      }
-      $event->setRetries(0);
-      $event->setStatus(EventStatus::Claimed->value);
-      $event->setMessage('Successfully executed - no additional output available');
-      $this->loggingService->logEventActivity($event, 'Event was executed');
-    } catch (DeferralException $error) {
-      // The system was unable to map properties, most likely because of an unresolvable relation.
-      // Skip the event for now; process it later.
-      $skippedUntil = $event->getSkipUntil();
-      $ttl = (int)($this->extensionConfiguration->get('fourallportal')['eventDeferralTTL'] ?? 86400);
-      $now = time();
-      $event->setMessage($error->getMessage() . ' (code: ' . $error->getCode() . ')');
-      $event->setStatus(EventStatus::Deferred->value);
-      $event->setRetries($event->getRetries() + 1);
-      // Next retry time: current time plus, plus number of retries times half an hour, plus/minus 600 seconds to
-      // stagger event execution and prevent the bulk from executing at the same time if many deferrals happen
-      // during a full sync. So, deferral waiting time increases incrementally from no less than 20 minutes to
-      // around 10 hours maximum.
-      $event->setNextRetry($now + ((min($event->getRetries(), 20)) * 1800) + rand(-600, 600));
-      if ($skippedUntil === 0) {
-        // Assign a TTL, after which is the event still causes a problem it gets marked as failed.
-        $skippedUntil = $now + $ttl;
-        $event->setSkipUntil($skippedUntil);
-      } elseif ($skippedUntil < $now) {
-        // Event has been deferred too long and still causes an error. Mark it as failed (and reset the
-        // deferral TTL so that deferral is again allowed, should the event be retried via BE module).
-        $event->setSkipUntil(0);
-        $event->setRetries(0);
-        $event->setStatus(EventStatus::Failed->value);
-      }
-      $this->loggingService->logEventActivity($event, 'Event was deferred', LogLevel::WARNING);
-    } catch (\Throwable $exception) {
-      $event->setStatus(EventStatus::Failed->value);
-      $event->setRetries(0);
-      $event->setMessage($exception->getMessage() . ' (code: ' . $exception->getCode() . ')' . $exception->getFile() . ':' . $exception->getLine());
-      if ($updateEventId) {
-        $event->getModule()->setLastEventId(max($event->getEventId(), $event->getModule()->getLastEventId()));
-      }
-
-      $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), LogLevel::WARNING);
-      $this->eventRepository->update($event);
-      try {
-        $this->persistenceManager->persistAll();
-      } catch (\Throwable $exception) {
-          $this->loggingService->logEventActivity(
-              $event,
-              'Changes not stored due to system errors: ' . $exception->getMessage(),
-              LogLevel::ERROR
-          );
-          $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
-      }
-      $this->response
-        ->setDescription(
-            $logPrefix . 'Processing failed. See log or event for details' .  PHP_EOL
-        )
-        ->send();
-      throw $exception;
-    }
-    $responseMetadata = $client->getLastResponse();
-
-    $event->setHeaders($responseMetadata['headers']);
-    if (($responseMetadata['url'] ?? null)) {
-      $event->setUrl($responseMetadata['url']);
-    }
-    if (($responseMetadata['response'] ?? null)) {
-      $event->setResponse($responseMetadata['response']);
-    }
-    if (($responseMetadata['payload'] ?? null)) {
-      $event->setPayload($responseMetadata['payload']);
-    }
-    $event->setProcessing(false);
-    $this->eventRepository->update($event);
-    try {
-        $this->persistenceManager->persistAll();
-    } catch (Exception $exception) {
+    /**
+     * Handle event exceptions
+     *
+     * - Write the event activity
+     * - Set status to failed
+     * - Remove processing flag
+     *
+     * @param Event $event
+     * @param string $message
+     * @return void
+     */
+    public function handleEventException(Event $event, string $message): void
+    {
         $this->loggingService->logEventActivity(
             $event,
-            'Changes not stored due to system errors: ' . $exception->getMessage(),
+            $message,
             LogLevel::ERROR
         );
-        $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
-      throw $exception;
+        if ($event->getStatus() !== EventStatus::Deferred->value) {
+            $event->setStatus(EventStatus::Failed->value);
+        }
+        $event->setProcessing(false);
+        $this->eventRepository->update($event);
+        try {
+            $this->persistenceManager->persistAll();
+        } catch (Exception $exception) {
+            $this->loggingService->logEventActivity(
+                $event,
+                'Changes not stored due to system errors: ' . $exception->getMessage(),
+                LogLevel::ERROR
+            );
+            $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
+            throw $exception;
+        }
     }
-    $parameters?->countExecutedEvent();
-    return $event->getStatus() === EventStatus::Claimed->value;
-  }
-
-  /**
-   * Handle event exceptions
-   *
-   * - Write the event activity
-   * - Set status to failed
-   * - Remove processing flag
-   *
-   * @param Event $event
-   * @param string $message
-   * @return void
-   */
-  public function handleEventException(Event $event, string $message): void
-  {
-      $this->loggingService->logEventActivity(
-          $event,
-          $message,
-          LogLevel::ERROR
-      );
-      if ($event->getStatus() !== EventStatus::Deferred->value) {
-          $event->setStatus(EventStatus::Failed->value);
-      }
-      $event->setProcessing(false);
-      $this->eventRepository->update($event);
-      try {
-          $this->persistenceManager->persistAll();
-      } catch (Exception $exception) {
-          $this->loggingService->logEventActivity(
-              $event,
-              'Changes not stored due to system errors: ' . $exception->getMessage(),
-              LogLevel::ERROR
-          );
-          $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
-          throw $exception;
-      }
-  }
 }
