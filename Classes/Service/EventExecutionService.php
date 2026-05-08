@@ -569,9 +569,11 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       return null;
     }
 
+    $logPrefix = '[Event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '"] ';
+
     $this->response
         ->setDescription(
-            'Processing ' . $event->getStatus() . ' event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '" - ' .
+            $logPrefix . 'Processing with status ' . $event->getStatus() . ' - ' .
             $event->getEventType() . ' ' . $event->getObjectId() . PHP_EOL
         )
         ->send();
@@ -654,11 +656,17 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       $this->eventRepository->update($event);
       try {
         $this->persistenceManager->persistAll();
-      } catch (Exception $exception) {
+      } catch (\Throwable $exception) {
+          $this->loggingService->logEventActivity(
+              $event,
+              'Changes not stored due to system errors: ' . $exception->getMessage(),
+              LogLevel::ERROR
+          );
+          $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
       }
       $this->response
         ->setDescription(
-           'Event "' . $event->getModule()->getModuleName() . ':' . $event->getEventId() . '" failed. See log or event for details' .  PHP_EOL
+            $logPrefix . 'Processing failed. See log or event for details' .  PHP_EOL
         )
         ->send();
       throw $exception;
@@ -678,9 +686,14 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     $event->setProcessing(false);
     $this->eventRepository->update($event);
     try {
-      $this->persistenceManager->persistAll();
+        $this->persistenceManager->persistAll();
     } catch (Exception $exception) {
-      $this->loggingService->logEventActivity($event, 'System error: ' . $exception->getMessage(), LogLevel::WARNING);
+        $this->loggingService->logEventActivity(
+            $event,
+            'Changes not stored due to system errors: ' . $exception->getMessage(),
+            LogLevel::ERROR
+        );
+        $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
       throw $exception;
     }
     $parameters?->countExecutedEvent();
@@ -710,6 +723,16 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
       }
       $event->setProcessing(false);
       $this->eventRepository->update($event);
-      $this->persistenceManager->persistAll();
+      try {
+          $this->persistenceManager->persistAll();
+      } catch (Exception $exception) {
+          $this->loggingService->logEventActivity(
+              $event,
+              'Changes not stored due to system errors: ' . $exception->getMessage(),
+              LogLevel::ERROR
+          );
+          $this->logger?->critical($logPrefix . 'Could not persists object: ' . $exception->getMessage());
+          throw $exception;
+      }
   }
 }
