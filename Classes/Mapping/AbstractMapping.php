@@ -977,8 +977,12 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
      * @return mixed
      * @throws Exception
      */
-    protected function createObject(Event $event, int $systemLanguage = 0, int $languageParentUid = 0, array|null $existingRow = null): DomainObjectInterface
-    {
+    protected function createObject(
+        Event $event,
+        int $systemLanguage = 0,
+        int $languageParentUid = 0,
+        array|null $existingRow = null
+    ): DomainObjectInterface {
         if ($systemLanguage > 0 && $languageParentUid === 0) {
             throw new Exception(
                 sprintf(
@@ -1049,9 +1053,15 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             );
         }
 
-        if ($systemLanguage) {
-            $createdObject->_setProperty(AbstractDomainObject::PROPERTY_LOCALIZED_UID, (int)($existingRow['uid'] ?? $recordUid));
-            $createdObject->_setProperty(AbstractDomainObject::PROPERTY_LANGUAGE_UID, $systemLanguage);
+        if ($systemLanguage > 0) {
+            $createdObject->_setProperty(
+                AbstractDomainObject::PROPERTY_LOCALIZED_UID,
+                (int)($existingRow['uid'] ?? $recordUid)
+            );
+            $createdObject->_setProperty(
+                AbstractDomainObject::PROPERTY_LANGUAGE_UID,
+                $systemLanguage
+            );
             $createdObject->setRemoteId($event->getObjectId());
         }
         return $createdObject;
