@@ -11,10 +11,12 @@ use Crossmedia\Fourallportal\Domain\Repository\EventRepository;
 use Crossmedia\Fourallportal\Domain\Repository\ModuleRepository;
 use Crossmedia\Fourallportal\Domain\Repository\ServerRepository;
 use Crossmedia\Fourallportal\Error\ApiException;
+use Crossmedia\Fourallportal\Event\Import\BeforeImportEvent;
 use Crossmedia\Fourallportal\Mapping\DeferralException;
 use Crossmedia\Fourallportal\Response\CollectingResponse;
 use Crossmedia\Fourallportal\Response\ResponseInterface;
 use Exception;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Configuration\Exception\ExtensionConfigurationExtensionNotConfiguredException;
@@ -39,6 +41,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
     use LoggerAwareTrait;
 
     protected ResponseInterface $response;
+    protected EventDispatcherInterface $eventDispatcher;
 
     /**
      * @param ServerRepository|null $serverRepository
@@ -58,10 +61,11 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
         protected ?PersistenceManagerInterface $persistenceManager,
         protected ?ConnectionPool              $connectionPool,
         protected ?SchedulerTaskRepository     $schedulerTaskRepository,
-        protected ?ExtensionConfiguration      $extensionConfiguration)
-    {
+        protected ?ExtensionConfiguration      $extensionConfiguration
+    ) {
         /** @see .build/vendor/typo3/cms-core/Documentation/Changelog/10.0/Breaking-87193-DeprecatedFunctionalityRemoved.rst */
         $this->response = new CollectingResponse();
+        $this->eventDispatcher = GeneralUtility::makeInstance(EventDispatcherInterface::class);
     }
 
     /**
@@ -606,6 +610,11 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
             }
             $this->eventRepository->update($event);
             $this->persistenceManager->persistAll();
+            $this->eventDispatcher->dispatch(new BeforeImportEvent(
+                $mapper->getEntityClassName(),
+                $event->getObjectId(),
+                $parameters?->toImmutableDataBag()
+            ));
             if ($mapper->import($responseData, $event)) {
                 // This method returns TRUE if any property caused problems that were also logged. When this
                 // happens, throw a deferral exception and let the catch statement below handle deferral.
