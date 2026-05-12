@@ -30,6 +30,41 @@ class SyncParameters
     private int $eventsExecuted = 0;
     private bool $deferredEvents = true;
 
+    /**
+     * Set this variable to true in order to rebuild all pim related relations
+     * The deletion has to be handles within the customer extension.
+     *
+     * This should not be the default, since some tables uses UIDs to have a correct access.
+     *
+     * @var bool
+     */
+    private bool $dropReleations = false;
+
+    /**
+     * Creates an immutable data base that can be used for events.
+     *
+     * This prevents that parameter changes for example by an event listener
+     *
+     * @return Parameters
+     */
+    public function toImmutableDataBag(): Parameters
+    {
+        return new Parameters(
+            $this->sync,
+            $this->fullSync,
+            $this->force,
+            $this->execute,
+            $this->module,
+            $this->exclude,
+            $this->timeLimit,
+            $this->eventLimit,
+            $this->beganTime,
+            $this->eventsExecuted,
+            $this->deferredEvents,
+            $this->dropReleations,
+        );
+    }
+
     public function shouldContinue(): bool
     {
         if ($this->timeLimit > 0 && (time() - $this->beganTime) >= $this->timeLimit) {
@@ -172,5 +207,11 @@ class SyncParameters
     public function processDeferredEvents(): bool
     {
         return $this->deferredEvents;
+    }
+
+    public function setDropAllRelations(bool $dropReleations): self
+    {
+        $this->dropReleations = $dropReleations;
+        return $this;
     }
 }
