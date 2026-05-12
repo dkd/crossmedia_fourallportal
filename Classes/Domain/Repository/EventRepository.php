@@ -47,6 +47,24 @@ class EventRepository extends Repository
     }
 
     /**
+     * Returns the last event by the given object id
+     *
+     * @param string $objectId
+     * @return array|QueryResultInterface
+     */
+    public function findLastEventByObjectId(string $objectId): ?Event
+    {
+        $query = $this->createQuery();
+        $constraint = $query->logicalAnd(
+            $query->equals('object_id', $objectId),
+            $query->equals('module.server.active', true),
+        );
+        $query->matching($constraint);
+        $query->setOrderings(['crdate' => 'DESC']);
+        return $query->execute()->getFirst();
+    }
+
+    /**
      * @param int $eventId
      * @return object|null
      */
