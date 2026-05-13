@@ -31,7 +31,7 @@ readonly class Parameters
         public int $beganTime = 0,
         public int $eventsExecuted = 0,
         public bool $deferredEvents = true,
-        public bool $dropReleations = false
+        public bool $dropRelations = false
     ) {
     }
 }

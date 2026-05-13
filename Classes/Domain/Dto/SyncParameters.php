@@ -38,7 +38,7 @@ class SyncParameters
      *
      * @var bool
      */
-    private bool $dropReleations = false;
+    private bool $dropRelations = false;
 
     /**
      * Creates an immutable data base that can be used for events.
@@ -61,7 +61,7 @@ class SyncParameters
             $this->beganTime,
             $this->eventsExecuted,
             $this->deferredEvents,
-            $this->dropReleations,
+            $this->dropRelations,
         );
     }
 
@@ -209,9 +209,9 @@ class SyncParameters
         return $this->deferredEvents;
     }
 
-    public function setDropAllRelations(bool $dropReleations): self
+    public function setDropAllRelations(bool $dropRelations): self
     {
-        $this->dropReleations = $dropReleations;
+        $this->dropRelations = $dropRelations;
         return $this;
     }
 }
