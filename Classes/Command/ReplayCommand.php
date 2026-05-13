@@ -69,8 +69,12 @@ DESCRIPTION)
 
         $consoleResponse = new ConsoleResponse($io);
         $this->eventExecutionService->setResponse($consoleResponse);
-        $this->eventExecutionService->replay($events, $module, $objectId);
-
-        return Command::SUCCESS;
+        try {
+            $this->eventExecutionService->replay($events, $module, $objectId);
+            return Command::SUCCESS;
+        } catch (\Throwable $throwable) {
+            $io->error($throwable->getMessage());
+            return Command::FAILURE;
+        }
     }
 }
