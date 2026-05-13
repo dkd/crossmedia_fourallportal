@@ -89,6 +89,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
      * @param string|null $module
      * @param string|null $objectId
      * @return void
+     * @throws Exception
      */
     public function replay(int $events = 1, string $module = null, string $objectId = null): void
     {
