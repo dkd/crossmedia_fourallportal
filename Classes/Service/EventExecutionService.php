@@ -721,8 +721,11 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
      * @param string $message
      * @return void
      */
-    public function handleEventException(Event $event, string $message): void
+    public function handleEventException(Event $event, string|\Throwable $message): void
     {
+        if ($message instanceof \Throwable) {
+            $message = $message->getMessage();
+        }
         $this->loggingService->logEventActivity(
             $event,
             $message,
