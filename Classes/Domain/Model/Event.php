@@ -2,6 +2,7 @@
 
 namespace Crossmedia\Fourallportal\Domain\Model;
 
+use Crossmedia\Fourallportal\Domain\Enum\EventStatus;
 use Crossmedia\Fourallportal\Utility\ConstantsUtility;
 use Doctrine\DBAL\Exception;
 use PDO;
@@ -28,7 +29,7 @@ class Event extends AbstractEntity
 {
   protected int $eventId = 0;
   protected string $eventType = '';
-  protected string $status = 'pending';
+  protected string $status = EventStatus::Pending->value;
   protected int $skipUntil = 0;
   protected int $nextRetry = 0;
   protected int $retries = 0;
@@ -51,7 +52,7 @@ class Event extends AbstractEntity
    */
   public function reset(): self
   {
-      $this->setStatus('pending');
+      $this->setStatus(EventStatus::Pending->value);
       $this->setNextRetry(0);
       $this->setProcessing(false);
       $this->setRetries(0);

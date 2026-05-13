@@ -2,6 +2,7 @@
 
 namespace Crossmedia\Fourallportal\Domain\Repository;
 
+use Crossmedia\Fourallportal\Domain\Enum\EventStatus;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Model\Module;
 use TYPO3\CMS\Extbase\Persistence\Exception\InvalidQueryException;
@@ -25,108 +26,141 @@ use TYPO3\CMS\Extbase\Persistence\Repository;
 class EventRepository extends Repository
 {
 
-  /**
-   * @param string $objectId
-   * @param int $limit
-   * @return array|QueryResultInterface
-   */
-  public function findByObjectId(string $objectId, int $limit = 0): array|QueryResultInterface
-  {
-    $query = $this->createQuery();
-    $constraint = $query->logicalAnd(
-      $query->equals('object_id', $objectId),
-      $query->equals('module.server.active', true),
-    );
-    $query->matching($constraint);
-    $query->setOrderings(['crdate' => 'ASC']);
-    if ($limit) {
-      $query->setLimit($limit);
+    /**
+     * @param string $objectId
+     * @param int $limit
+     * @return array|QueryResultInterface
+     */
+    public function findByObjectId(string $objectId, int $limit = 0): array|QueryResultInterface
+    {
+        $query = $this->createQuery();
+        $constraint = $query->logicalAnd(
+            $query->equals('object_id', $objectId),
+            $query->equals('module.server.active', true),
+        );
+        $query->matching($constraint);
+        $query->setOrderings(['crdate' => 'ASC']);
+        if ($limit) {
+            $query->setLimit($limit);
+        }
+        return $query->execute();
     }
-    return $query->execute();
-  }
 
-  /**
-   * @param string $status
-   * @param int $limit
-   * @param bool $includeProcessing
-   * @return array|QueryResultInterface
-   */
-  public function findByStatus(string $status, int $limit = 0, bool $includeProcessing = true): array|QueryResultInterface
-  {
-    $query = $this->createQuery();
-    $constraints = [
-      $query->equals('status', $status),
-      $query->equals('module.server.active', true),
-    ];
-    if (!$includeProcessing) {
-      $constraints[] = $query->logicalNot($query->equals('processing', true));
+    /**
+     * Returns the last event by the given object id
+     *
+     * @param string $objectId
+     * @return array|QueryResultInterface
+     */
+    public function findLastEventByObjectId(string $objectId): ?Event
+    {
+        $query = $this->createQuery();
+        $constraint = $query->logicalAnd(
+            $query->equals('object_id', $objectId),
+            $query->equals('module.server.active', true),
+        );
+        $query->matching($constraint);
+        $query->setOrderings(['crdate' => 'DESC']);
+        return $query->execute()->getFirst();
     }
-    $constraint = $query->logicalAnd(...$constraints);
 
-    $query->matching($constraint);
-    $query->setOrderings(['crdate' => 'ASC']);
-    if ($limit) {
-      $query->setLimit($limit);
+    /**
+     * @param int $eventId
+     * @return object|null
+     */
+    public function findByEventId(int $eventId): ?object
+    {
+        $query = $this->createQuery();
+        $query->matching(
+            $query->logicalAnd(
+                $query->equals('eventId', $eventId)
+            )
+        );
+        return $query->execute()->getFirst();
     }
-    return $query->execute();
-  }
 
-  /**
-   * @param int $limit
-   * @return array|QueryResultInterface
-   * @throws InvalidQueryException
-   */
-  public function findDeferred(int $limit = 0): array|QueryResultInterface
-  {
-    $query = $this->createQuery();
-    $constraint = $query->logicalAnd(
-      $query->equals('status', 'deferred'),
-      $query->lessThan('nextRetry', time()),
-      $query->logicalNot($query->equals('processing', true))
-    );
-    $query->matching($constraint);
-    $query->setOrderings(['crdate' => 'ASC']);
-    if ($limit) {
-      $query->setLimit($limit);
+    /**
+     * @param string $status
+     * @param int $limit
+     * @param bool $includeProcessing
+     * @return array|QueryResultInterface
+     */
+    public function findByStatus(string $status, int $limit = 0, bool $includeProcessing = true): array|QueryResultInterface
+    {
+        $query = $this->createQuery();
+        $constraints = [
+            $query->equals('status', $status),
+            $query->equals('module.server.active', true),
+        ];
+        if (!$includeProcessing) {
+            $constraints[] = $query->logicalNot($query->equals('processing', true));
+        }
+        $constraint = $query->logicalAnd(...$constraints);
+
+        $query->matching($constraint);
+        $query->setOrderings(['crdate' => 'ASC']);
+        if ($limit) {
+            $query->setLimit($limit);
+        }
+        return $query->execute();
     }
-    return $query->execute();
-  }
 
-  /**
-   * @param Module $module
-   * @param int $limit
-   * @return QueryResultInterface|array
-   */
-  public function findByModule(Module $module, int $limit = 0): QueryResultInterface|array
-  {
-    $query = $this->createQuery();
-    $query->matching(
-      $query->logicalAnd(
-        $query->equals('module', $module->getUid()),
-      )
-    );
-    if ($limit) {
-      $query->setLimit($limit);
+    /**
+     * @param int $limit
+     * @return array|QueryResultInterface
+     * @throws InvalidQueryException
+     */
+    public function findDeferred(int $limit = 0): array|QueryResultInterface
+    {
+        $query = $this->createQuery();
+        $constraint = $query->logicalAnd(
+            $query->equals('status', EventStatus::Deferred->value),
+            $query->lessThan('nextRetry', time()),
+            $query->logicalNot($query->equals('processing', true))
+        );
+        $query->matching($constraint);
+        $query->setOrderings(['crdate' => 'ASC']);
+        if ($limit) {
+            $query->setLimit($limit);
+        }
+        return $query->execute();
     }
-    return $query->execute();
-  }
 
-  /**
-   * @param Module $module
-   * @param int $eventId
-   * @return object|null
-   */
-  public function findOneByModuleAndEventId(Module $module, int $eventId): ?object
-  {
-    $query = $this->createQuery();
-    $query->matching(
-      $query->logicalAnd(
-        $query->equals('module', $module->getUid()),
-        $query->equals('eventId', $eventId)
-      )
-    );
-    return $query->execute()->getFirst();
-  }
+    /**
+     * @param Module $module
+     * @param int $limit
+     * @return QueryResultInterface|array
+     */
+    public function findByModule(Module $module, int $limit = 0): QueryResultInterface|array
+    {
+        $query = $this->createQuery();
+        $query->matching(
+            $query->logicalAnd(
+                $query->equals('module', $module->getUid()),
+            )
+        );
+        if ($limit) {
+            $query->setLimit($limit);
+        }
+        return $query->execute();
+    }
+
+    /**
+     * @param Module $module
+     * @param int $eventId
+     * @return object|null
+     */
+    public function findOneByModuleAndEventId(Module $module, int $eventId): ?object
+    {
+        $query = $this->createQuery();
+        $query->matching(
+            $query->logicalAnd(
+                $query->equals('module', $module->getUid()),
+                $query->equals('eventId', $eventId)
+            )
+        );
+        return $query->execute()->getFirst();
+    }
 
     /**
      * Mark an event as queued for asynchronous execution
@@ -139,7 +173,7 @@ class EventRepository extends Repository
     public function queueEvent(Event $event): void
     {
         $event->reset();
-        $event->setStatus('queued');
+        $event->setStatus(EventStatus::Queued->value);
         $this->update($event);
     }
 }

@@ -2,10 +2,9 @@
 
 namespace Crossmedia\Fourallportal\Command;
 
+use Crossmedia\Fourallportal\Command\Event\AbstractEventCommand;
 use Crossmedia\Fourallportal\Domain\Dto\SyncParameters;
 use Crossmedia\Fourallportal\Response\ConsoleResponse;
-use Crossmedia\Fourallportal\Service\EventExecutionService;
-use Doctrine\DBAL\Exception;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -13,25 +12,14 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use TYPO3\CMS\Core\Database\ConnectionPool;
-use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Extbase\Persistence\Exception\IllegalObjectTypeException;
-use TYPO3\CMS\Extbase\Persistence\Exception\InvalidQueryException;
-use TYPO3\CMS\Extbase\Persistence\Exception\UnknownObjectException;
 
 #[AsCommand(
     name: 'fourallportal:sync',
-    description: 'Sync data'
+    description: 'Sync data',
+    aliases: ['fourallportal:event:sync-execute']
 )]
-class SyncCommand extends Command
+class SyncCommand extends AbstractEventCommand
 {
-    public function __construct(
-        protected ?EventExecutionService $eventExecutionService = null,
-        protected ?ConnectionPool $connectionPool = null,
-    ) {
-        parent::__construct();
-    }
-
     /**
      * Configure the command by defining the name, options and arguments
      */
@@ -40,7 +28,6 @@ class SyncCommand extends Command
         $this
             ->setDescription('Sync data')
             ->setHelp("Execute this to synchronise events from the PIM API")
-            ->addArgument('module', InputArgument::OPTIONAL, 'If passed can be used to only sync one module, using the module or connector name it has in 4AP', null)
             ->addOption(
                 'sync',
                 null,
@@ -59,41 +46,27 @@ class SyncCommand extends Command
                 InputOption::VALUE_NONE,
                 'Executes events after receiving (syncing) events'
             )
-            ->addOption(
-                'force',
-                'f',
-                InputOption::VALUE_NONE,
-                'Forces the sync to run regardless of lock and will neither lock nor unlock the task'
-            )
-            ->addOption(
-                'exclude',
-                null,
-                InputOption::VALUE_REQUIRED,
-                'Exclude a list of modules from processing (CSV string module names)',
-                null
-            )
-            ->addOption(
-                'max-events',
-                null,
-                InputOption::VALUE_REQUIRED,
-                'Maximum number of events to process. Default is unlimited. Affects only the number of events being executed, if sync is enabled will still sync all',
-                0
-            )
-            ->addOption(
-                'max-time',
-                null,
-                InputOption::VALUE_REQUIRED,
-                'Maximum number of seconds that the sync is allowed to run, once expired, will require a new execution to continue',
-                0
-            )
-            ->addOption(
-                'max-threads',
-                null,
-                InputOption::VALUE_REQUIRED,
-                'Maximum number of concurrent threads which are allowed to execute events. Ignored if sync=true',
-                4
-            )
         ;
+        parent::configure();
+    }
+
+    protected function initialize(InputInterface $input, OutputInterface $output)
+    {
+        parent::initialize($input, $output);
+        $sync = $input->hasOption('sync') && $input->getOption('sync');
+        $fullSync = $input->hasOption('full-sync') && $input->getOption('full-sync');
+        $execute = $input->hasOption('execute') && $input->getOption('execute');
+
+        $this->parameters
+            ->setSync($sync)
+            ->setFullSync($fullSync)
+            ->setExecute($execute)
+        ;
+
+        // If option sync is enabled
+        if ($this->parameters->getFullSync() && !$this->parameters->getSync()) {
+            $this->parameters->setSync(true);
+        }
     }
 
     /**
@@ -104,42 +77,28 @@ class SyncCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $io->title($this->getDescription());
 
-        $sync = $input->hasOption('sync') && $input->getOption('sync');
-        $fullSync = $input->hasOption('full-sync') && $input->getOption('full-sync');
-        $module = $input->getArgument('module');
-        $exclude = (string)$input->getOption('exclude');
-        $force = $input->hasOption('force') && $input->getOption('force');
-        $execute = $input->hasOption('execute') && $input->getOption('execute');
-        $maxEvents = (int)$input->getOption('max-events');
-        $maxTime = (int)$input->getOption('max-time');
-        $maxThreads = (int)$input->getOption('max-threads');
-
-        // If option sync is enabled
-        if ($fullSync && !$sync) {
-            $sync = true;
-        }
-
-        if (!$sync && !$execute) {
+        if (!$this->parameters->getSync() && !$this->parameters->getExecute()) {
             $io->writeln('Either option --sync, --full-sync or --execute has to be used' . PHP_EOL);
             return Command::INVALID;
         }
 
-        if (!$sync) {
+        if (!$this->parameters->getSync()) {
             // We are executing only, not syncing. Check number of currently running threads - if no more threads are
             // allowed, exit early.
-            $queryBuilder = $this->connectionPool->getQueryBuilderForTable('tx_fourallportal_domain_model_event');
-            $query = $queryBuilder->select('uid')
-                ->from('tx_fourallportal_domain_model_event')
-                ->where($queryBuilder->expr()->eq('processing', 1));
-            $currentThreadCount = $query->executeQuery()->rowCount();
-            if ($currentThreadCount >= $maxThreads) {
+            $currentThreadCount = $this->eventRepository->count(
+                [
+                    'processing' => true
+                ]
+            );
+            if ($currentThreadCount >= $this->maxThreads) {
                 if ($output->isVerbose()) {
-                    $io->writeln('Maximum allowed threads of ' . $maxThreads . ' reached.');
+                    $io->writeln('Maximum allowed threads of ' . $this->maxThreads . ' reached.');
                 }
                 return Command::SUCCESS;
             }
         }
-        if (!$force && $sync) {
+
+        if (!$this->parameters->getForce() && $this->parameters->getSync()) {
             try {
                 $this->eventExecutionService->lock();
             } catch (\Exception $error) {
@@ -148,21 +107,11 @@ class SyncCommand extends Command
             }
         }
 
-        $syncParameters = GeneralUtility::makeInstance(SyncParameters::class)
-            ->setSync($sync)
-            ->setFullSync($fullSync)
-            ->setModule($module)
-            ->setExclude($exclude)
-            ->setForce($force)
-            ->setExecute($execute)
-            ->setEventLimit($maxEvents)
-            ->setTimeLimit($maxTime);
-
         $consoleResponse = new ConsoleResponse($io);
         $this->eventExecutionService->setResponse($consoleResponse);
-        $this->eventExecutionService->sync($syncParameters);
+        $this->eventExecutionService->sync($this->parameters);
 
-        if (!$force && $sync) {
+        if (!$this->parameters->getForce() && $this->parameters->getSync()) {
             $this->eventExecutionService->unlock();
         }
         return Command::SUCCESS;

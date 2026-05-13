@@ -13,6 +13,7 @@ namespace Crossmedia\Fourallportal\Controller;
  *
  ***/
 
+use Crossmedia\Fourallportal\Domain\Enum\EventStatus;
 use Crossmedia\Fourallportal\Domain\Model\Event;
 use Crossmedia\Fourallportal\Domain\Repository\EventRepository;
 use Crossmedia\Fourallportal\Queue\Message\EventExecuteMessage;
@@ -87,15 +88,13 @@ final class EventController extends ActionController
         ?Event $modifiedEvent = null,
         int $currentPage = 1
     ): ResponseInterface {
-        $eventOptions = [
-            'pending' => 'Status: pending',
-            'failed' => 'Status: failed',
-            'deferred' => 'Status: deferred',
-            'claimed' => 'Status: claimed',
-            'queued' => 'Status: in Queue',
-            'processing' => 'Status: processing',
-            'all' => 'Status: all'
-        ];
+        $eventOptions = [];
+        foreach (EventStatus::cases() as $case) {
+            $eventOptions[$case->value] =  'Status: ' . $case->name;
+        }
+
+        $eventOptions['processing'] = 'Currently processing';
+        $eventOptions['all'] = 'All';
 
         $searchWidened = null;
         if ($objectId) {
@@ -193,8 +192,8 @@ final class EventController extends ActionController
         );
         foreach ($events as $historicalEvent) {
             if ($historicalEvent->getEventType() === 'delete') {
-                $view->assign('deleted', ($historicalEvent->getStatus() === 'claimed'));
-                $view->assign('deletedScheduled', ($historicalEvent->getStatus() === 'pending'));
+                $view->assign('deleted', ($historicalEvent->getStatus() === EventStatus::Claimed->value));
+                $view->assign('deletedScheduled', ($historicalEvent->getStatus() === EventStatus::Pending->value));
                 break;
             }
         }
@@ -217,7 +216,7 @@ final class EventController extends ActionController
         $returnTo = $this->request->getQueryParams()['returnTo'] ?? [];
         $action = $returnTo['action'] ?? 'index';
         $arguments = [
-            'status' => 'pending'
+            'status' => EventStatus::Pending->value
         ];
 
         foreach ($returnTo as $fieldName => $value) {

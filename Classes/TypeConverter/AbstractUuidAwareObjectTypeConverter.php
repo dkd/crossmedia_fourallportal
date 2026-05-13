@@ -3,7 +3,10 @@
 namespace Crossmedia\Fourallportal\TypeConverter;
 
 use Doctrine\DBAL\Exception;
+use Psr\Log\LoggerAwareTrait;
+use Psr\Log\LoggerInterface;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Log\LogManager;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
 use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapper;
@@ -14,6 +17,8 @@ use TYPO3\CMS\Extbase\Property\TypeConverterInterface;
 
 abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConverter implements TypeConverterInterface, PimBasedTypeConverterInterface
 {
+    use LoggerAwareTrait;
+
     /**
      * @var AbstractEntity
      */
@@ -59,8 +64,10 @@ abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConv
      */
     public function convertFrom($source, string $targetType, array $convertedChildProperties = [], PropertyMappingConfigurationInterface $configuration = null): ?object
     {
+        $sourceType = 'string';
         if (is_numeric($source)) {
             $existingRecordUid = (int)$source;
+            $sourceType = 'numeric';
         } else {
             $tableName = $this->getTableName($targetType);
             $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
@@ -77,16 +84,18 @@ abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConv
             try {
                 $existingRecordUid = $existingRow->fetchOne();
             } catch (Exception $e) {
+                $this->getLogger()->error($e->getMessage());
                 return null;
             }
         }
         if ($existingRecordUid) {
-            return $this->getObjectByUidUnrestricted((int)$existingRecordUid);
+            return $this->getObjectByUidUnrestricted((int)$existingRecordUid, $source);
         }
+        $this->getLogger()->warning($this->targetType . ': Data not found for remote id ' . $source . ' (' . $sourceType . ')');
         return null;
     }
 
-    protected function getObjectByUidUnrestricted(int $uid): ?object
+    protected function getObjectByUidUnrestricted(int $uid, $source): ?object
     {
         $query = $this->getRepository()->createQuery();
         //$query->getQuerySettings()->setLanguageMode('strict');
@@ -101,6 +110,7 @@ abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConv
             $object->_memorizeCleanState();
             return $object;
         }
+        $this->getLogger()->warning($this->targetType . ': Object not found for UID ' . $uid . ' (' . ((string)$source) . ')');
         return null;
     }
 
@@ -116,6 +126,16 @@ abstract class AbstractUuidAwareObjectTypeConverter extends PersistentObjectConv
     protected function getRepository(): RepositoryInterface
     {
         return GeneralUtility::makeInstance(ltrim(str_replace('\\Domain\\Model\\', '\\Domain\\Repository\\', $this->getSupportedTargetType()) . 'Repository', '\\'));
+    }
+
+    protected function getLogger(): LoggerInterface
+    {
+        if ($this->logger === null) {
+            $this->logger = GeneralUtility::makeInstance(LogManager::class)
+                ->getLogger(__CLASS__);
+        }
+
+        return $this->logger;
     }
 
     /**

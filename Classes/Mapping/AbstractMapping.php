@@ -28,6 +28,7 @@ use TYPO3\CMS\Core\TypoScript\FrontendTypoScript;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Resource\File;
 use TYPO3\CMS\Extbase\Domain\Model\FileReference;
+use TYPO3\CMS\Extbase\DomainObject\AbstractDomainObject;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
 use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 use TYPO3\CMS\Extbase\Persistence\Generic\Mapper\DataMapper;
@@ -510,7 +511,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     }
 
                     $refObject = new ReflectionClass($object);
-                    $languageIdProperty = $refObject->getProperty('_languageUid');
+                    $languageIdProperty = $refObject->getProperty(AbstractDomainObject::PROPERTY_LANGUAGE_UID);
                     // set driver property to public
                     /** @noinspection PhpExpressionResultUnusedInspection */
                     $languageIdProperty->setAccessible(true);
@@ -519,6 +520,13 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                     if ($child instanceof Error) {
                         // For whatever reason, property validators will return a validation error rather than throw an exception.
                         // We therefore need to check this, log the problem, and skip the property.
+                        $errorMessage = $child->getMessage();
+                        if (empty($errorMessage)) {
+                            $errorMessage = $child->getTitle();
+                        }
+                        if (empty($errorMessage)) {
+                            $errorMessage = 'Code: ' . $child->getCode();
+                        }
 
                         $message = vsprintf(
                             'Mapping error when mapping property %1$s on %2$s:%3$s in language UID %4$s: %5$s',
@@ -527,7 +535,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                                 get_class($object),
                                 $objectId,
                                 $languageUid,
-                                $child->getMessage()
+                                $errorMessage
                             ]
                         );
                         $this->logger?->warning($message);
@@ -575,10 +583,10 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                             $remoteId = $getRemoteId($related);
                             if (!empty($remoteId)) {
                                 if (!in_array($remoteId, $usedChilds)) {
-                                    $this->logger?->debug($logPrefix . 'Remove unused relation to ' . $remoteId);
+                                    $this->logger?->info($logPrefix . 'Remove unused relation to ' . $remoteId);
                                     $objectStorage->detach($related);
                                 } elseif (in_array($remoteId, $processed)) {
-                                    $this->logger?->debug($logPrefix . 'Remove duplicate relation to ' . $remoteId);
+                                    $this->logger?->info($logPrefix . 'Remove duplicate relation to ' . $remoteId);
                                     $objectStorage->detach($related);
                                 } else {
                                     $processed[] = $remoteId;
@@ -673,7 +681,11 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             }
         }
 
-        ObjectAccess::setProperty($setOnObject, $lastPropertyName, $propertyValue);
+        $result = ObjectAccess::setProperty($setOnObject, $lastPropertyName, $propertyValue);
+        if ($result === false) {
+            $message = $logPrefix . 'Setting property "' . $propertyName . '" failed';
+            $this->logger?->error($message);
+        }
 
         return $mappingProblemsOccurred;
     }
@@ -965,8 +977,12 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
      * @return mixed
      * @throws Exception
      */
-    protected function createObject(Event $event, int $systemLanguage = 0, int $languageParentUid = 0, array|null $existingRow = null): mixed
-    {
+    protected function createObject(
+        Event $event,
+        int $systemLanguage = 0,
+        int $languageParentUid = 0,
+        array|null $existingRow = null
+    ): DomainObjectInterface {
         if ($systemLanguage > 0 && $languageParentUid === 0) {
             throw new Exception(
                 sprintf(
@@ -1021,7 +1037,10 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
         //->setLanguageMode('strict')
         //->setLanguageOverlayMode('hideNonTranslated');
 
-        $createdObject = $query->matching($query->equals('remote_id', $event->getObjectId()))->execute()->getFirst();
+        /** @var DomainObjectInterface $createdObject */
+        $createdObject = $query->matching($query->equals('remote_id', $event->getObjectId()))
+            ->execute()
+            ->getFirst();
         if (!$createdObject) {
             throw new Exception(
                 sprintf(
@@ -1034,9 +1053,15 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
             );
         }
 
-        if ($systemLanguage) {
-            $createdObject->_setProperty('_localizedUid', (int)($existingRow['uid'] ?? $recordUid));
-            $createdObject->_setProperty('_languageUid', $systemLanguage);
+        if ($systemLanguage > 0) {
+            $createdObject->_setProperty(
+                AbstractDomainObject::PROPERTY_LOCALIZED_UID,
+                (int)($existingRow['uid'] ?? $recordUid)
+            );
+            $createdObject->_setProperty(
+                AbstractDomainObject::PROPERTY_LANGUAGE_UID,
+                $systemLanguage
+            );
             $createdObject->setRemoteId($event->getObjectId());
         }
         return $createdObject;
@@ -1152,12 +1177,19 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                 }
                 $translationObject = $this->createObject($event, $languageUid, $object->getUid(), $existingRow);
                 //$translationObject->setRemoteId($event->getObjectId());
-                $objectMappingProblemsOccurred = $this->mapPropertiesFromDataToObject($data, $translationObject, $event->getModule(), $translationDimensionMapping);
+                $objectMappingProblemsOccurred = $this->mapPropertiesFromDataToObject(
+                    $data,
+                    $translationObject,
+                    $event->getModule(),
+                    $translationDimensionMapping
+                );
                 $mappingProblemsOccurred = $mappingProblemsOccurred ?: $objectMappingProblemsOccurred;
                 $this->getObjectRepository()->update($translationObject);
                 $this->persist();
                 $this->session->unregisterObject($translationObject);
-            } catch (Exception $e) {
+            } catch (\Throwable $throwable) {
+                $this->loggingService->logEventActivity($event, 'Failed to process language ' . $languageUid . ' -> ' . $throwable->getMessage());
+                $this->logger->error($throwable->getMessage());
             }
         }
 
