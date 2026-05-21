@@ -8,7 +8,7 @@ return [
     'delete' => 'deleted',
     'rootLevel' => 1,
     'enablecolumns' => [
-      'disabled' => 'hidden',
+      'disabled' => 'active',
     ],
     'searchFields' => 'domain,customer_name,username,password,active,modules',
     'iconfile' => 'EXT:fourallportal/Resources/Public/Icons/tx_fourallportal_domain_model_server.gif',
@@ -100,8 +100,6 @@ return [
           'showAllLocalizationLink' => 1
         ],
       ],
-
     ],
-
   ],
 ];

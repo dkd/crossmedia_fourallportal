@@ -3,7 +3,6 @@
 #
 CREATE TABLE tx_fourallportal_domain_model_server
 (
-
     uid                int(11)                          NOT NULL auto_increment,
     pid                int(11)              DEFAULT '0' NOT NULL,
 
@@ -15,14 +14,8 @@ CREATE TABLE tx_fourallportal_domain_model_server
     modules            int(11) unsigned     DEFAULT '0' NOT NULL,
     dimension_mappings int(11) unsigned     DEFAULT '0' NOT NULL,
 
-    tstamp             int(11) unsigned     DEFAULT '0' NOT NULL,
-    crdate             int(11) unsigned     DEFAULT '0' NOT NULL,
-    deleted            smallint(5) unsigned DEFAULT '0' NOT NULL,
-    hidden             smallint(5) unsigned DEFAULT '0' NOT NULL,
-
     PRIMARY KEY (uid),
     KEY parent (pid)
-
 );
 
 #
@@ -30,10 +23,8 @@ CREATE TABLE tx_fourallportal_domain_model_server
 #
 CREATE TABLE tx_fourallportal_domain_model_module
 (
-
     uid                    int(11)                          NOT NULL auto_increment,
     pid                    int(11)              DEFAULT '0' NOT NULL,
-    sorting                int(11) unsigned     DEFAULT '0' NOT NULL,
 
     server                 int(11) unsigned     DEFAULT '0' NOT NULL,
 
@@ -51,9 +42,6 @@ CREATE TABLE tx_fourallportal_domain_model_module
     usage_flag             varchar(32)          DEFAULT ''  NOT NULL,
     test_object_uuid       varchar(255)         DEFAULT ''  NOT NULL,
 
-    tstamp                 int(11) unsigned     DEFAULT '0' NOT NULL,
-    crdate                 int(11) unsigned     DEFAULT '0' NOT NULL,
-
     PRIMARY KEY (uid),
     KEY parent (pid)
 );
@@ -63,7 +51,6 @@ CREATE TABLE tx_fourallportal_domain_model_module
 #
 CREATE TABLE tx_fourallportal_domain_model_complextype
 (
-
     uid                  int(11)                          NOT NULL auto_increment,
     pid                  int(11)              DEFAULT '0' NOT NULL,
 
@@ -80,14 +67,6 @@ CREATE TABLE tx_fourallportal_domain_model_complextype
     actual_value_max     varchar(255)         DEFAULT ''  NOT NULL,
     cast_type            varchar(16)          DEFAULT ''  NOT NULL,
 
-    tstamp               int(11) unsigned     DEFAULT '0' NOT NULL,
-    crdate               int(11) unsigned     DEFAULT '0' NOT NULL,
-    deleted              smallint(5) unsigned DEFAULT '0' NOT NULL,
-    sys_language_uid     INT(11)              DEFAULT '0' NOT NULL,
-    l10n_state           TEXT                 DEFAULT NULL,
-    l10n_parent          INT(11)              DEFAULT '0' NOT NULL,
-    l10n_diffsource      mediumblob,
-
     PRIMARY KEY (uid),
     KEY parent (pid),
     KEY field_name (field_name),
@@ -95,7 +74,6 @@ CREATE TABLE tx_fourallportal_domain_model_complextype
     KEY name (name),
     KEY sys_language_uid (sys_language_uid),
     KEY l10n_parent (l10n_parent)
-
 );
 
 #
@@ -103,7 +81,6 @@ CREATE TABLE tx_fourallportal_domain_model_complextype
 #
 CREATE TABLE tx_fourallportal_domain_model_event
 (
-
     uid        int(11)                          NOT NULL auto_increment,
     pid        int(11)              DEFAULT '0' NOT NULL,
 
@@ -123,18 +100,14 @@ CREATE TABLE tx_fourallportal_domain_model_event
     payload    text,
     message    text,
 
-    tstamp     int(11) unsigned     DEFAULT '0' NOT NULL,
-    crdate     int(11) unsigned     DEFAULT '0' NOT NULL,
-    deleted    smallint(5) unsigned DEFAULT '0' NOT NULL,
-
     PRIMARY KEY (uid),
     KEY parent (pid),
+    KEY crdate (crdate),
     KEY event_type (event_type),
     KEY object_id (object_id),
     KEY status (status),
     KEY module (module),
     KEY next_retry (next_retry)
-
 );
 
 #
@@ -151,7 +124,6 @@ CREATE TABLE sys_file
 #
 CREATE TABLE tx_fourallportal_domain_model_dimensionmapping
 (
-
     uid                int(11)                               NOT NULL auto_increment,
     pid                int(11)              DEFAULT '0'      NOT NULL,
 
@@ -162,12 +134,8 @@ CREATE TABLE tx_fourallportal_domain_model_dimensionmapping
     metric_or_imperial varchar(10)          DEFAULT 'Metric' NOT NULL,
     active             smallint(5) unsigned DEFAULT '1'      NOT NULL,
 
-    tstamp             int(11) unsigned     DEFAULT '0'      NOT NULL,
-    crdate             int(11) unsigned     DEFAULT '0'      NOT NULL,
-
     PRIMARY KEY (uid),
     KEY parent (pid)
-
 );
 
 #
@@ -175,7 +143,6 @@ CREATE TABLE tx_fourallportal_domain_model_dimensionmapping
 #
 CREATE TABLE tx_fourallportal_domain_model_dimension
 (
-
     uid               int(11)                      NOT NULL auto_increment,
     pid               int(11)          DEFAULT '0' NOT NULL,
 
@@ -184,10 +151,6 @@ CREATE TABLE tx_fourallportal_domain_model_dimension
     name              varchar(255)     DEFAULT ''  NOT NULL,
     value             varchar(255)     DEFAULT ''  NOT NULL,
 
-    tstamp            int(11) unsigned DEFAULT '0' NOT NULL,
-    crdate            int(11) unsigned DEFAULT '0' NOT NULL,
-
     PRIMARY KEY (uid),
     KEY parent (pid)
-
 );

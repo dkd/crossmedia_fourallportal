@@ -8,6 +8,7 @@ return [
     'rootLevel' => 1,
     'enablecolumns' => [ ],
     'iconfile' => 'EXT:fourallportal/Resources/Public/Icons/tx_fourallportal_domain_model_dimensionmapping.gif',
+    'enablecolumns' => ['disabled' => 'active'],
     'security' => [
       'ignorePageTypeRestriction' => true,
     ],
@@ -70,7 +71,6 @@ return [
           'showAllLocalizationLink' => 1
         ],
       ],
-
     ],
   ],
 ];
