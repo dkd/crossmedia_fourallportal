@@ -335,9 +335,53 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
     $existingFileRows = $query->executeQuery();
     $remoteModificationTime = 0;
 
-    if ($folder->hasFile($targetFilename)) {
-      $file = $this->searchFile($folder, $targetFilename);
+    // Resolve the existing file by remote_id: rename/delete as needed.
+    // Runs before hasFile() so a rename is already reflected when deciding whether a download is needed.
+    foreach ($existingFileRows as $existingFileRow) {
+      $existingFile = $storage->getFile($existingFileRow['identifier']);
+      $refStorage = new ReflectionClass($storage);
+      $driverProperty = $refStorage->getProperty('driver');
+      // set driver property to public
+      /** @noinspection PhpExpressionResultUnusedInspection */
+      $driverProperty->setAccessible(true);
+      $driver = $driverProperty->getValue($storage);
 
+      if (!$existingFile || !$driver->fileExists($existingFile->getIdentifier())) {
+        // File is determined to not exist, but exists in database. Remove the record, create file anew.
+        // If this is not done, various permission nonsense is raised by FAL without indication of the
+        // actual error. Any problem ranging from a missing file over file/folder permissions to user
+        // restrictions may be in effect, all of which result in the same error. We target the "file is
+        // missing" case specifically here since that's the case we are likely to encounter when renaming.
+        $deleteQb = $this->getQueryBuilderForTable('sys_file');
+        $deleteQb->delete('sys_file')
+          ->where(
+            $deleteQb->expr()->eq('uid', $existingFileRow['uid'])
+          )
+          ->executeStatement();
+      } elseif ($existingFileRow['name'] !== $targetFilename) {
+        // File exists physically but has a different name (e.g. bm_typo3_title changed).
+        // Rename instead of delete+recreate so existing sys_file_reference records stay valid.
+        try {
+          $file = $storage->renameFile($existingFile, $targetFilename);
+        } catch (ExistingTargetFileNameException $renameError) {
+          // Target name already taken on disk; delete the stale DB record so the existing physical
+          // file (already named correctly) can be picked up and linked to the right remote_id.
+          $deleteQb = $this->getQueryBuilderForTable('sys_file');
+          $deleteQb->delete('sys_file')
+            ->where($deleteQb->expr()->eq('uid', $existingFileRow['uid']))
+            ->executeStatement();
+        }
+      } else {
+        // Note: this case reached only if file physically exists and has the same name.
+        $file = $existingFile;
+      }
+      break; // Only process the first (should be the only) matching record.
+    }
+
+    if ($folder->hasFile($targetFilename)) {
+      if (!$file) {
+        $file = $this->searchFile($folder, $targetFilename);
+      }
       $remoteModificationTime = (
       new DateTime($fieldValueReader->readResponseDataField($data['result'][0], 'mod_time_img', $dimensionMapping)
         ?? $fieldValueReader->readResponseDataField($data['result'][0], 'mod_time', $dimensionMapping)
@@ -353,33 +397,7 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
         $contents = file_get_contents($tempPathAndFilename);
         unlink($tempPathAndFilename);
         $targetFilename = $this->sanitizeFileName(pathinfo($targetFilename, PATHINFO_BASENAME));
-        if ($existingFileRows) {
-          foreach ($existingFileRows as $existingFileRow) {
-            $existingFile = $storage->getFile($existingFileRow['identifier']);
-            $refStorage = new ReflectionClass($storage);
-            $driverProperty = $refStorage->getProperty('driver');
-            // set driver property to public
-            /** @noinspection PhpExpressionResultUnusedInspection */
-            $driverProperty->setAccessible(true);
-            $driver = $driverProperty->getValue($storage);
-
-            if (!$existingFile || $existingFileRow['name'] !== $targetFilename || !$driver->fileExists($existingFile->getIdentifier())) {
-              // File is determined to not exist, but exists in database. Remove the record, create file anew.
-              // If this is not done, various permission nonsense is raised by FAL without indication of the
-              // actual error. Any problem ranging from a missing file over file/folder permissions to user
-              // restrictions may be in effect, all of which result in the same error. We target the "file is
-              // missing" case specifically here since that's the case we are likely to encounter when renaming.
-              $queryBuilder->delete('sys_file')
-                  ->where(
-                      $queryBuilder->expr()->eq('uid', $existingFileRow['uid'])
-                  )
-                  ->executeStatement();
-            } elseif ($existingFileRow['name'] === $targetFilename) {
-              // Note: this case reached only if file physically exists and has the same name, due to check above.
-              $file = $existingFile;
-            }
-          }
-        } else {
+        if (!$file) {
           $file = $folder->createFile($targetFilename);
         }
       } catch (ExistingTargetFileNameException $error) {
