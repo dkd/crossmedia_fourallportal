@@ -13,7 +13,6 @@ use DateTime;
 use Doctrine\DBAL\Exception;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
-use Psr\Log\LoggerInterface;
 use ReflectionClass;
 use ReflectionException;
 use RuntimeException;
@@ -30,11 +29,8 @@ use TYPO3\CMS\Core\Resource\Exception\InsufficientFolderWritePermissionsExceptio
 use TYPO3\CMS\Core\Resource\Exception\InvalidFileNameException;
 use TYPO3\CMS\Core\Resource\File;
 use TYPO3\CMS\Core\Resource\Folder;
-use TYPO3\CMS\Core\Resource\ResourceFactory;
-use TYPO3\CMS\Core\Resource\FileInterface;
 use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Resource\Index\MetaDataRepository;
-use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Domain\Model\FileReference;
 use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
@@ -79,7 +75,6 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
         /** @var File|null $object */
         $object = null;
 
-        // We have to do things the hard way, unfortunately. Because someone didn't implement a real Repository but declared the class a Repository anyway. Sigh.
         $queryBuilder = $this->getQueryBuilderForTable('sys_file');
         $query = $queryBuilder->select('uid')
             ->from('sys_file')
@@ -241,7 +236,6 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
      */
     protected function mapPropertiesFromDataToObject(array $data, AbstractEntity|File $object, Module $module, DimensionMapping $dimensionMapping = null): bool
     {
-
         // If it's a File object, we'll handle metadata differently
         if ($object instanceof File) {
             $metadata = [];
@@ -304,6 +298,17 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
             $finalFileExtension = $fieldValueReader->readResponseDataField($data['result'][0], 'bm_derivatsformat', $dimensionMapping);
         } catch (PropertyNotAccessibleException $error) {
             $finalFileExtension = null;
+        }
+
+        // If the source is a PSD but no target format is defined, skip this file entirely.
+        // PSD files must be converted to a raster format (png/jpg) — storing raw PSD is not supported.
+        $sourceExtension = strtolower($originalFileExtension);
+        if ($sourceExtension === 'psd' && empty($finalFileExtension)) {
+            $this->logger?->warning('Skipping PSD file without bm_derivatsformat: ' . $originalFullFileName);
+            throw new RuntimeException(
+                'PSD file "' . $originalFullFileName . '" has no bm_derivatsformat set. Cannot store PSD files directly.',
+                1747230951
+            );
         }
 
         $targetFilename = ($finalFileName ?? $originalFileName) . '.' . ($finalFileExtension ?? $originalFileExtension);
@@ -371,6 +376,41 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
 
             // Physical file exists and is the first valid match for this remote_id.
             if ($existingFileRow['name'] !== $targetFilename) {
+                // If the existing file is a PSD but the target name has an image extension,
+                // convert the physical file and update the DB mime_type before renaming.
+                // TYPO3's renameFile() calls assureResourceConsistency() which reads the mime_type
+                // from the File object's DB-cached value — so we must update both disk and DB first.
+                $existingExtension = strtolower(pathinfo($existingFileRow['name'], PATHINFO_EXTENSION));
+                $desiredExtension = strtolower(pathinfo($targetFilename, PATHINFO_EXTENSION));
+                $imageFormats = ['png', 'jpg', 'jpeg'];
+                $needsConversion = (
+                    ($existingExtension === 'psd' && in_array($desiredExtension, $imageFormats))
+                    || (in_array($existingExtension, $imageFormats) && in_array($desiredExtension, $imageFormats) && $existingExtension !== $desiredExtension)
+                );
+                if ($needsConversion) {
+                    $localSourcePath = $existingFile->getForLocalProcessing(false);
+                    $convertedPath = $this->convertImage($localSourcePath, $desiredExtension);
+                    if ($convertedPath !== false) {
+                        // Overwrite physical file with converted image
+                        file_put_contents($localSourcePath, file_get_contents($convertedPath));
+                        unlink($convertedPath);
+                        // Update mime_type and extension in the File object's internal property cache
+                        // AND in the DB, so renameFile()'s assureResourceConsistency() check passes.
+                        $newMimeType = $desiredExtension === 'png' ? 'image/png' : 'image/jpeg';
+                        $existingFile->updateProperties([
+                            'mime_type' => $newMimeType,
+                            'extension' => $desiredExtension,
+                        ]);
+                        $this->getQueryBuilderForTable('sys_file')
+                            ->update('sys_file')
+                            ->set('mime_type', $newMimeType)
+                            ->set('extension', $desiredExtension)
+                            ->where(
+                                $this->getQueryBuilderForTable('sys_file')->expr()->eq('uid', $existingFileRow['uid'])
+                            )
+                            ->executeStatement();
+                    }
+                }
                 // Rename instead of delete+recreate so existing sys_file_reference records stay valid.
                 try {
                     $file = $storage->renameFile($existingFile, $targetFilename);
@@ -403,12 +443,49 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
             $download = $file && $file->getModificationTime() < $remoteModificationTime;
         }
 
+        $targetExtension = strtolower(pathinfo($targetFilename, PATHINFO_EXTENSION));
+        $originalExtension = strtolower(pathinfo(
+            $fieldValueReader->readResponseDataField($data['result'][0], 'name', $dimensionMapping),
+            PATHINFO_EXTENSION
+        ));
+        $imageFormats = ['png', 'jpg', 'jpeg'];
+        // Conversion needed when source is PSD with a target image format,
+        // or when source and target are both raster image formats but differ (e.g. png→jpg).
+        $needsConversion = in_array($targetExtension, $imageFormats) && (
+                $originalExtension === 'psd'
+                || ($originalExtension !== $targetExtension && in_array($originalExtension, $imageFormats))
+            );
+
+        // Force download if the existing file's format no longer matches the target format.
+        if (!$download && $needsConversion && $file && in_array($file->getExtension(), ['psd', ...$imageFormats]) && $file->getExtension() !== $targetExtension) {
+            $this->logger?->debug('Forcing download for format conversion (' . $file->getExtension() . '→' . $targetExtension . '): ' . $targetFolder . $targetFilename);
+            $download = true;
+        }
+
         if ($download) {
             $this->logger?->debug('Downloading: ' . $targetFolder . $targetFilename);
             try {
-                $tempPathAndFilename = $client->saveDerivate($tempPathAndFilename, $event->getObjectId(), $event->getModule()->getUsageFlag());
-                $contents = file_get_contents($tempPathAndFilename);
-                unlink($tempPathAndFilename);
+                // Download to a temp file using the original source extension so content and
+                // extension match (avoids MIME-type issues during download).
+                $downloadTarget = $needsConversion
+                    ? GeneralUtility::tempnam('mamfal_src', '.' . $originalExtension)
+                    : $tempPathAndFilename;
+
+                $downloadTarget = $client->saveDerivate($downloadTarget, $event->getObjectId(), $event->getModule()->getUsageFlag());
+
+                // Convert to target image format before passing to TYPO3 FAL
+                if ($needsConversion) {
+                    $this->logger?->debug('Converting ' . $originalExtension . ' to ' . $targetExtension . ': ' . $downloadTarget);
+                    $convertedFile = $this->convertImage($downloadTarget, $targetExtension);
+                    unlink($downloadTarget);
+                    if ($convertedFile === false) {
+                        throw new RuntimeException('Failed to convert ' . $originalExtension . ' to ' . $targetExtension . ' for object ' . $objectId, 1747230950);
+                    }
+                    $downloadTarget = $convertedFile;
+                }
+
+                $contents = file_get_contents($downloadTarget);
+                unlink($downloadTarget);
                 $targetFilename = $this->sanitizeFileName(pathinfo($targetFilename, PATHINFO_BASENAME));
                 // Only create a new file if no existing file was resolved in the loop above.
                 if (!$file) {
@@ -629,5 +706,39 @@ class FalMapping extends AbstractMapping implements LoggerAwareInterface
         return GeneralUtility::makeInstance(ConnectionPool::class)
             ->getConnectionForTable($tableName)
             ->createQueryBuilder();
+    }
+
+    /**
+     * Converts an image file (psd/png/jpg/jpeg) to the desired image format using ImageMagick.
+     * The [0] layer selector ensures only the first layer is used (relevant for PSD files).
+     * Returns the path to the converted file, or false on failure.
+     *
+     * @param string $sourcePath Path to the source image file
+     * @param string $targetExtension Target extension (png, jpg, jpeg)
+     * @return string|false Path to the converted file or false on error
+     */
+    protected function convertImage(string $sourcePath, string $targetExtension): string|false
+    {
+        if (!file_exists($sourcePath)) {
+            $this->logger?->error('Source file does not exist: ' . $sourcePath);
+            return false;
+        }
+
+        $targetPath = sys_get_temp_dir() . '/' . pathinfo($sourcePath, PATHINFO_FILENAME) . '.' . $targetExtension;
+        $command = 'convert ' . escapeshellarg($sourcePath . '[0]') . ' ' . escapeshellarg($targetPath) . ' 2>&1';
+        $output = [];
+        $returnVar = null;
+
+        exec($command, $output, $returnVar);
+
+        if ($returnVar !== 0 || !file_exists($targetPath) || filesize($targetPath) === 0) {
+            $this->logger?->error('Failed to convert image to ' . strtoupper($targetExtension) . ': ' . implode(' ', $output));
+            if (file_exists($targetPath)) {
+                unlink($targetPath);
+            }
+            return false;
+        }
+
+        return $targetPath;
     }
 }
