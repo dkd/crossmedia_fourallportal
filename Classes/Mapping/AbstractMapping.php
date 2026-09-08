@@ -384,7 +384,12 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
 
         $array = (new ReflectionMethod(get_class($object), 'set' . ucfirst($propertyName)))->getParameters();
         if ($propertyValue === null && reset($array)->allowsNull()) {
-            ObjectAccess::setProperty($object, $propertyName, null);
+            $targetType = $this->determineDataTypeForProperty($propertyName, $object);
+            if (str_contains($targetType, 'ObjectStorage')) {
+                ObjectAccess::setProperty($object, $propertyName, new ObjectStorage());
+            } else {
+                ObjectAccess::setProperty($object, $propertyName, null);
+            }
             return false;
         }
         $configuration = new PropertyMappingConfiguration();
@@ -836,7 +841,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
 
         $connectorConfiguration = $module->getConnectorConfiguration();
         $moduleConfiguration = $module->getModuleConfiguration();
-        $allFields = $moduleConfiguration['field_conf'] + $moduleConfiguration['relation_conf'];
+        $allFields = $moduleConfiguration['fields'] + $moduleConfiguration['relation_conf'];
         $loadedFields = array_keys($connectorConfiguration['fieldsToLoad']);
 
         $fieldTypes = array_column($allFields, 'type', 'name');
@@ -915,7 +920,7 @@ abstract class AbstractMapping implements MappingInterface, LoggerAwareInterface
                 $properties[$field['name']]['value'] = null;
             }
         }
-        foreach ($moduleConfiguration['field_conf'] as $field) {
+        foreach ($moduleConfiguration['fields'] as $field) {
             if (!isset($properties[$field['name']])) {
                 $value = '';
                 if (isset($field['defaultValue'])) {

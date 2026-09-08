@@ -59,7 +59,7 @@ return [
     ],
     'config_hash' => [
       'exclude' => true,
-      'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_module.config_hash',
+      'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_module.hash',
       'config' => [
         'type' => 'passthrough',
       ],

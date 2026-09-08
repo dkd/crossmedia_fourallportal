@@ -90,7 +90,7 @@ class ModuleService
                 $tableRows[] = [
                     $module->getModuleName(),
                     $module->getConfigHash(),
-                    $module->getConnectorConfiguration()['config_hash'] ?? '',
+                    $module->getConnectorConfiguration()['hash'] ?? '',
                     $module->verifySchemaVersion() ? 'yes' : 'no',
                 ];
             }

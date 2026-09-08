@@ -66,9 +66,9 @@ class Module extends AbstractEntity
     return $this->configHash;
   }
 
-  public function setConfigHash(string $configHash): void
+  public function setConfigHash(string $hash): void
   {
-    $this->configHash = $configHash;
+    $this->configHash = $hash;
   }
 
   public function getLastEventId(): int
@@ -202,7 +202,7 @@ class Module extends AbstractEntity
 //      $configs[$this->moduleName] = $this->getServer()->getClient()->getModuleConfig($this->moduleName);
 //    }
 //    return $configs[$this->moduleName];
-    return $this->getServer()->getClient()->getModuleConfig($this->moduleName);
+      return $this->getServer()->getClient()->getModuleConfig($this->moduleName, true);
   }
 
   /**
@@ -216,7 +216,7 @@ class Module extends AbstractEntity
 //      $configs[$this->connectorName] = $this->getServer()->getClient()->getConnectorConfig($this->connectorName);
 //    }
 //    return $configs[$this->connectorName];
-    return $this->getServer()->getClient()->getConnectorConfig($this->connectorName);
+    return $this->getServer()->getClient()->getConnectorConfig($this->connectorName, true);
   }
 
   /**
@@ -225,7 +225,7 @@ class Module extends AbstractEntity
    */
   public function verifySchemaVersion(): bool
   {
-    return $this->configHash === $this->getConnectorConfiguration()['config_hash'];
+    return $this->configHash === $this->getConnectorConfiguration()['hash'];
   }
 
   /**
@@ -236,7 +236,7 @@ class Module extends AbstractEntity
    */
   public function pinSchemaVersion(): void
   {
-    $this->configHash = $this->getConnectorConfiguration()['config_hash'];
+    $this->configHash = $this->getConnectorConfiguration()['hash'];
     $this->update();
   }
 
