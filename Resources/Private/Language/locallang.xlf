@@ -36,7 +36,7 @@
 			<trans-unit id="tx_fourallportal_domain_model_module.mapping_class">
 				<source>Mapping Class</source>
 			</trans-unit>
-			<trans-unit id="tx_fourallportal_domain_model_module.config_hash">
+			<trans-unit id="tx_fourallportal_domain_model_module.hash">
 				<source>Config Hash</source>
 			</trans-unit>
 			<trans-unit id="tx_fourallportal_domain_model_module.last_event_id">

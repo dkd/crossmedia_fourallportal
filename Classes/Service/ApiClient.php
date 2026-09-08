@@ -13,8 +13,6 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class ApiClient
 {
-    protected ?string $sessionId = null;
-    protected static array $sessionPool = array();
     protected int $folderCreateMask;
     protected int $fileCreateMask;
     protected static array $lastResponse = [];
@@ -29,14 +27,6 @@ class ApiClient
      */
     public function __construct(protected Server $server)
     {
-        if (empty(self::$sessionPool)) {
-            register_shutdown_function(function () {
-                foreach (self::$sessionPool as $session) {
-                    $session->logout();
-                }
-            });
-        }
-        self::$sessionPool[] = $this;
         $this->initializeCreateMasks();
         $this->loggingService = GeneralUtility::makeInstance(LoggingService::class);
         $this->extensionConfiguration = GeneralUtility::makeInstance(ExtensionConfiguration::class);
@@ -49,92 +39,122 @@ class ApiClient
      */
     public function login(): string|false
     {
-        $response = $this->doPostRequest(
-            uri: $this->server->getLoginUrl(),
-            data: [
-                'username' => $this->server->getUsername(),
-                'password' => base64_encode($this->server->getPassword()),
-                'language' => 'en_US',
-            ],
-            persist: false
-        );
-        if (!empty($response['session'] ?? null)) {
-            $this->sessionId = $response['session'];
-            $this->loggingService->logConnectionActivity('login, session ID: ' . $this->sessionId);
-            return $this->sessionId;
+        $response = $this->doGetRequest($this->server->getApiUrl() . 'connectors');
+        $result = json_decode($response, true);
+        if (is_array($result)) {
+            $this->loggingService->logConnectionActivity('Bearer Token valid - connectors reachable');
+            return true;
         }
-        $this->loggingService->logConnectionActivity('login FAILED', LogLevel::CRITICAL);
+        $this->loggingService->logConnectionActivity('Bearer Token invalid - connectors not reachable', LogLevel::CRITICAL);
         return false;
-    }
-
-    /**
-     * @return void
-     * @throws ApiException
-     */
-    public function logout(): void
-    {
-        if ($this->sessionId === null) {
-            return;
-        }
-        $this->doPostRequest(
-            uri: $this->server->getRestUrl() . 'LoginRemoteService/logout',
-            data: [
-                $this->sessionId,
-            ],
-            persist: false
-        );
-        $this->loggingService->logConnectionActivity('logout, session ID: ' . $this->sessionId);
-        $this->sessionId = null;
     }
 
     /**
      * Get configuration for a connector from MAM
      *
-     * @apiparam session_id - User session
-     * @apiparam connector_name - Name of the connector
-     *
      * @param string|null $connectorName
+     * @param bool $withFieldsToLoad - Whether to fetch and build fieldsToLoad from module configuration
      * @return array $configuration
      * @throws ApiException
      */
-    public function getConnectorConfig(string $connectorName = null): array
+    public function getConnectorConfig(string $connectorName = null, bool $withFieldsToLoad = false): array
     {
-        $response = $this->doPostRequest(
-            uri: $this->server->getRestUrl() . 'PAPRemoteService/getConnectorConfig',
-            data: [
-                $this->sessionId,
-                $connectorName,
-            ],
-            persist: false
+        $response = $this->doGetRequest(
+            $this->server->getApiUrl() . 'connectors/' . $connectorName
         );
-        $this->validateResponseCode($response);
+
+        $result = json_decode($response, true);
+        $this->validateResponseCode($result);
+
+        if ($withFieldsToLoad && !empty($result['fields']) && !empty($result['module_name'])) {
+            $moduleConfig = $this->getModuleConfig($result['module_name']);
+            $moduleFieldsByName = [];
+            foreach ($moduleConfig['fields'] ?? [] as $field) {
+                $moduleFieldsByName[$field['name']] = $field;
+            }
+
+            $fieldsToLoad = [];
+            foreach ($result['fields'] as $fieldName) {
+                if (isset($moduleFieldsByName[$fieldName])) {
+                    $fieldsToLoad[$fieldName] = $moduleFieldsByName[$fieldName];
+                }
+            }
+            $result['fieldsToLoad'] = $fieldsToLoad;
+        }
+
         $this->loggingService->logConnectionActivity('Retrieved connector configuration for ' . $connectorName);
-        return $response['result'];
+        return $result;
     }
 
     /**
      * Get module configuration from MAM
      *
-     * @apiparam session_id - User session
-     * @apiparam connector_name - Name of the connector
-     *
      * @param string|null $moduleName
+     * @param bool $withRelationConf - Whether to fetch and build relation_conf from value-options endpoint
      * @return array $configuration
      * @throws ApiException
      */
-    public function getModuleConfig(string $moduleName = null): array
+    public function getModuleConfig(string $moduleName = null, bool $withRelationConf = false): array
     {
-        $response = $this->doPostRequest(
-            uri: $this->server->getRestUrl() . 'PAPRemoteService/getModuleConfig',
-            data: [
-                $this->sessionId,
-                $moduleName,
-            ],
-            persist: false
+        $response = $this->doGetRequest(
+            $this->server->getApiUrl() . 'modules/' . $moduleName . '?groups=fields'
         );
-        $this->validateResponseCode($response);
+        $result = json_decode($response, true);
+        $this->validateResponseCode($result);
+
+        $result['fields'] = array_column($result['fields'] ?? [], null, 'name');
+
+        if ($withRelationConf) {
+            $response = $this->doGetRequest(
+                $this->server->getApiUrl() . 'system/value-options?ids=' . $moduleName . '.referenced_by'
+            );
+            $valueOptions = json_decode($response, true);
+            $result['relation_conf'] = $this->buildRelationConfFromValueOptions(
+                $valueOptions[$moduleName . '.referenced_by'] ?? [],
+                $moduleName
+            );
+        }
+
         $this->loggingService->logConnectionActivity('Retrieved module configuration for ' . $moduleName);
-        return $response['result'];
+        return $result;
+    }
+
+    protected function buildRelationConfFromValueOptions(array $valueOptions, string $currentModuleName): array
+    {
+        $relationConf = [];
+
+        foreach ($valueOptions['groups'] ?? [] as $group) {
+            $parentModule = $group['key'];
+            foreach ($group['items'] ?? [] as $item) {
+                $itemKey = $item['key'];
+                $icon = $item['icon'] ?? '';
+
+                // Derive type from icon
+                $type = match($icon) {
+                    'V-FIELD_LINK'  => 'FIELD_LINK',
+                    'V-OBJECT_LINK' => 'OBJECT_LINK',
+                    default         => 'FIELD_LINK',
+                };
+
+                // field name: strip parentModule prefix from itemKey
+                // e.g. "hedgehog_product" with parent "hedgehog" -> field = "product"
+                $field = $itemKey;
+                if (str_starts_with($itemKey, $parentModule . '_')) {
+                    $field = substr($itemKey, strlen($parentModule) + 1);
+                }
+
+                $relationConf[$itemKey] = [
+                    'type'           => $type,
+                    'name'           => $itemKey,
+                    'field'          => $field,
+                    'parent'         => $parentModule,
+                    'child'          => $currentModuleName,
+                    'relatedModule'  => $parentModule,
+                ];
+            }
+        }
+
+        return $relationConf;
     }
 
     /**
@@ -149,7 +169,6 @@ class ApiClient
     {
 
         $uri = $this->server->getApiUrl() . 'modules/file/objects/' . $objectId . '/media/' . $usage;
-        $sessionCookie = 'Cookie: CESESSID=' . $this->sessionId;
 
         $temporaryFilename = tempnam(sys_get_temp_dir(), 'fal_mam-' . $objectId);
 
@@ -165,7 +184,6 @@ class ApiClient
         $temporaryHeaderbufferName = tempnam(sys_get_temp_dir(), 'header-buff' . $objectId);
         $headerBuff = fopen($temporaryHeaderbufferName, 'w+');
 
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array($sessionCookie));
         curl_setopt($ch, CURLOPT_TIMEOUT, (int)$this->portalConfig['clientConnectTimeout']);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int)$this->portalConfig['clientTransferTimeout']);
         curl_setopt($ch, CURLOPT_FILE, $fp);
@@ -173,6 +191,10 @@ class ApiClient
         curl_setopt($ch, CURLOPT_WRITEHEADER, $headerBuff);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, (bool)$this->portalConfig['verifyPeer']);
         curl_setopt($ch, CURLOPT_POST, 0);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $this->server->getPassword(),
+        ]);
 
         curl_exec($ch);
 
@@ -233,23 +255,18 @@ class ApiClient
     /**
      * Get events from MAM starting from a specific event id
      *
-     * This service did not deliver all IDs. The maximum amount is 1000.
-     * All event have been returned, in case 0 is returned.
-     *
-     * @apiparam session_id - User session
-     * @apiparam connector_name - Name des Connectors
-     * @apiparam event_id - The Id of the first event
-     * @apiparam config_hash - MD5. Hash of the configuration to determine possible changes of the configuration.
+     * @apiparam connector_name - Name of the connector
+     * @apiparam id - The last known event id
+     * @apiparam hash - Hash of the configuration to determine possible changes of the configuration.
      *
      * @param string $connectorName
      * @param integer $eventId
      * @return array $events
      *
      * id - event id
-     * create_time - time of creation
+     * mod_time - time of modification
      * object_id - id of the relevant object
-     * object_type - type of the relevant object (0 = bean, 1 = derivate, 2 = both)
-     * field_name - derivate type
+     * object_type - type of the relevant object
      * event_type - type of event (0 = delete, 1 = update, 2 = create)
      * @throws ApiException
      */
@@ -257,25 +274,21 @@ class ApiClient
     {
         $connectorConfig = $this->getConnectorConfig($connectorName);
 
-        $response = $this->doPostRequest(
-            $this->server->getRestUrl() . 'PAPRemoteService/getEvents',
-            [
-                $this->sessionId,
-                $connectorName,
-                $eventId ? $eventId + 1 : 0,
-                $connectorConfig['config_hash']
-            ],
-            false
+        $response = $this->doGetRequest(
+            $this->server->getApiUrl() . 'connectors/' . $connectorName . '/events/' . ($eventId ? $eventId + 1 : 0) . '?hash=' . $connectorConfig['hash']
         );
-        switch ($response['code']) {
-            case 0:
-                $this->loggingService->logConnectionActivity('Events fetched for ' . $connectorName . ' since event ID ' . $eventId);
-                return $response['result'];
-            default:
-                $message = $response['code'] . ': ' . $response['message'];
-                $this->loggingService->logConnectionActivity($message, LogLevel::CRITICAL);
-                throw new ApiException($message, 4181110095);
+
+        $result = json_decode($response, true);
+        $this->validateResponseCode($result);
+
+        $moduleName = $connectorConfig['module_name'] ?? '';
+        foreach ($result as &$event) {
+            $event['module_name'] = $moduleName;
         }
+        unset($event);
+
+        $this->loggingService->logConnectionActivity('Events fetched for ' . $connectorName . ' since event ID ' . $eventId);
+        return $result ?? [];
     }
 
     /**
@@ -284,9 +297,8 @@ class ApiClient
      * This service did not deliver all IDs. The maximum amount is 1000.
      * All event have been returned, in case 0 is returned.
      *
-     * @apiparam session_id - User session
-     * @apiparam connector_name - Name of the connectors
-     * @apiparam ids - The Ids of the Beans
+     * @apiparam connector_name - Name of the connector
+     * @apiparam ids - The IDs of the objects
      *
      * @param string|array $objectIds
      * @param string $connectorName
@@ -296,17 +308,30 @@ class ApiClient
     public function getBeans(string|array $objectIds, string $connectorName): iterable
     {
         if (!is_array($objectIds)) {
-            $objectIds = array($objectIds);
+            $objectIds = [$objectIds];
         }
 
-        $beans = $this->doPostRequest(
-            $this->server->getRestUrl() . 'PAPRemoteService/getBeans',
-            array(
-                $this->sessionId,
-                $connectorName,
-                $objectIds,
-            )
+        $idsParam = implode('&ids=', array_map('urlencode', $objectIds));
+        $response = $this->doGetRequest(
+            $this->server->getApiUrl() . 'connectors/' . $connectorName . '/objects?ids=' . $idsParam
         );
+
+        $result = json_decode($response, true);
+        $this->validateResponseCode($result);
+
+        $reserved = array_flip(['id', 'module', 'type', 'mod_time']);
+        $transformed = [];
+        foreach ($result as $object) {
+            $transformed[] = [
+                'id'          => $object['id'],
+                'module_name' => $object['module'],
+                'mod_time'    => $object['mod_time'],
+                'type'        => $object['type'],
+                'properties'  => array_diff_key($object, $reserved),
+            ];
+        }
+
+        $beans = ['result' => $transformed];
 
         if (!isset($beans['result'][0])) {
             $this->loggingService->logConnectionActivity('Bean data request returned no results. Response: ' . json_encode($beans), LogLevel::CRITICAL);
@@ -357,6 +382,7 @@ class ApiClient
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
+            'Authorization: Bearer ' . $this->server->getPassword(),
         ]);
 
         $response = curl_exec($ch);
@@ -408,7 +434,7 @@ class ApiClient
             $this->loggingService->logConnectionActivity($message, LogLevel::CRITICAL);
             throw new ApiException($message, 9802312867);
         }
-        if (!isset($result['code']) || (int)($result['code'] ?? -1) != 0) {
+        if (isset($result['status']) && (int)$result['status'] >= 400) {
             $message = $result['message'] ?? 'MamClient: could not communicate with mam api. please try again later';
             $this->loggingService->logConnectionActivity($message, LogLevel::CRITICAL);
             throw new ApiException($message . ' - Response code ' . ($result['code'] ?? 'N/A') . ': ' . $this->translateResponseCode((int)($result['code'] ?? -1)), 8133411903);
@@ -438,11 +464,15 @@ class ApiClient
     public function doGetRequest(string $uri): bool|string
     {
         $ch = curl_init($uri);
-        curl_setopt($ch, CURLOPT_VERBOSE, true);
+        curl_setopt($ch, CURLOPT_VERBOSE, false);
         curl_setopt($ch, CURLOPT_TIMEOUT, (int)$this->portalConfig['clientConnectTimeout']);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int)$this->portalConfig['clientTransferTimeout']);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, (bool)$this->portalConfig['verifyPeer']);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $this->server->getPassword(),
+        ]);
         static::$lastResponse['headers'] = [];
         static::$lastResponse['response'] = $result = curl_exec($ch);
         static::$lastResponse['uri'] = $uri;

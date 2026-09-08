@@ -18,13 +18,15 @@ class ResponseDataFieldValueReader implements LoggerAwareInterface
             && array_key_exists('value', $result['properties'][$fieldName][0] ?? [])
             && is_array($result['properties'][$fieldName][0]['dimensions'] ?? false)
         ) {
-            if ($dimensionMapping !== null) {
-                if (empty($result['properties'][$fieldName][0]['dimensions'])) {
-                    // This is a dimension capable response, but the dimensions are empty; return the value since it applies to
-                    // every possible translation.
-                    return $result['properties'][$fieldName][0]['value'];
-                }
+            if (empty($result['properties'][$fieldName][0]['dimensions'])
+                || !isset($result['properties'][$fieldName][0]['dimensions']['locale'])
+            ) {
+                // This is a dimension capable response, but the dimensions are empty; return the value since it applies to
+                // every possible translation.
+                return $result['properties'][$fieldName][0]['value'];
+            }
 
+            if ($dimensionMapping !== null) {
                 // Look for a value in dimensions specific to this dimension mapping.
                 foreach ($result['properties'][$fieldName] as $dimensionObject) {
                     if ($dimensionMapping->matches($dimensionObject['dimensions'])) {
@@ -64,6 +66,13 @@ class ResponseDataFieldValueReader implements LoggerAwareInterface
                 ), 5482380929
             );
         }
-        return $result['properties'][$fieldName]['value'] ?? $result['properties'][$fieldName] ?? null;
+
+        $val = $result['properties'][$fieldName]['value'] ?? $result['properties'][$fieldName] ?? null;
+
+        if ($val === []) {
+            return null;
+        }
+
+        return $val;
     }
 }
