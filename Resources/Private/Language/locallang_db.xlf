@@ -48,7 +48,7 @@
 			<trans-unit id="tx_fourallportal_domain_model_module.contains_dimensions">
 				<source>Data from module may contain dimensions (disable if possible, for speed)</source>
 			</trans-unit>
-			<trans-unit id="tx_fourallportal_domain_model_module.config_hash">
+			<trans-unit id="tx_fourallportal_domain_model_module.hash">
 				<source>Config Hash</source>
 			</trans-unit>
 			<trans-unit id="tx_fourallportal_domain_model_module.last_event_id">

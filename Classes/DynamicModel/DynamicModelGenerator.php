@@ -616,8 +616,8 @@ TEMPLATE;
         foreach ($fieldsAndRelations as $originalName => $fieldConfiguration) {
             // We need to reset a possibly overridden types so they use the *module* configuration's list of fields and
             // types as the actual type of the field. This is important to the subsequent logic!
-            if (!empty($moduleConfiguration['field_conf'][$originalName]['type'])) {
-                $fieldConfiguration['type'] = $moduleConfiguration['field_conf'][$originalName]['type'];
+            if (!empty($moduleConfiguration['fields'][$originalName]['type'])) {
+                $fieldConfiguration['type'] = $moduleConfiguration['fields'][$originalName]['type'];
             }
 
             //$fieldName = $fieldConfiguration['field'] ?? $fieldConfiguration['name'];
@@ -1855,7 +1855,7 @@ TEMPLATE;
         }
         $moduleConfiguration = $module->getModuleConfiguration();
         $connectorConfiguration = $module->getConnectorConfiguration();
-        $fieldConfiguration = $moduleConfiguration['field_conf'] ?? [];
+        $fieldConfiguration = $moduleConfiguration['fields'] ?? [];
         $relationConfiguration = $moduleConfiguration['relation_conf'] ?? [];
         $fieldsToLoad = $connectorConfiguration['fieldsToLoad'] ?? [];
 
