@@ -29,7 +29,7 @@ class Module extends AbstractEntity
   protected string $connectorName = '';
   protected string $moduleName = '';
   protected string $mappingClass = '';
-  protected string $hash = '';
+  protected string $configHash = '';
   protected int $lastEventId = 0;
   protected int $lastReceivedEventId = 0;
   protected string $shellPath = '';
@@ -61,14 +61,14 @@ class Module extends AbstractEntity
     $this->moduleName = $moduleName;
   }
 
-  public function getHash(): string
+  public function getConfigHash(): string
   {
-    return $this->hash;
+    return $this->configHash;
   }
 
-  public function setHash(string $hash): void
+  public function setConfigHash(string $configHash): void
   {
-    $this->hash = $hash;
+    $this->configHash = $configHash;
   }
 
   public function getLastEventId(): int
@@ -202,7 +202,7 @@ class Module extends AbstractEntity
 //      $configs[$this->moduleName] = $this->getServer()->getClient()->getModuleConfig($this->moduleName);
 //    }
 //    return $configs[$this->moduleName];
-      return $this->getServer()->getClient()->getModuleConfig($this->moduleName, true);
+    return $this->getServer()->getClient()->getModuleConfig($this->moduleName);
   }
 
   /**
@@ -216,7 +216,7 @@ class Module extends AbstractEntity
 //      $configs[$this->connectorName] = $this->getServer()->getClient()->getConnectorConfig($this->connectorName);
 //    }
 //    return $configs[$this->connectorName];
-    return $this->getServer()->getClient()->getConnectorConfig($this->connectorName, true);
+    return $this->getServer()->getClient()->getConnectorConfig($this->connectorName);
   }
 
   /**
@@ -225,7 +225,7 @@ class Module extends AbstractEntity
    */
   public function verifySchemaVersion(): bool
   {
-    return $this->hash === $this->getConnectorConfiguration()['hash'];
+    return $this->configHash === $this->getConnectorConfiguration()['config_hash'];
   }
 
   /**
@@ -236,7 +236,7 @@ class Module extends AbstractEntity
    */
   public function pinSchemaVersion(): void
   {
-    $this->hash = $this->getConnectorConfiguration()['hash'];
+    $this->configHash = $this->getConnectorConfiguration()['config_hash'];
     $this->update();
   }
 

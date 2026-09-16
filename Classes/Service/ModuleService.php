@@ -89,8 +89,8 @@ class ModuleService
                 /** @var Module $module*/
                 $tableRows[] = [
                     $module->getModuleName(),
-                    $module->getHash(),
-                    $module->getConnectorConfiguration()['hash'] ?? '',
+                    $module->getConfigHash(),
+                    $module->getConnectorConfiguration()['config_hash'] ?? '',
                     $module->verifySchemaVersion() ? 'yes' : 'no',
                 ];
             }

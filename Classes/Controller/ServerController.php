@@ -109,34 +109,33 @@ final class ServerController extends ActionController
       'class' => 'info',
       'description' => 'starting progress',
     ];
-
     try {
       $client = $server->getClient();
-      $authCheck = $client->login();
+      $sessionId = $client->login();
       $status[] = [
-          'title' => 'login',
-          'class' => $authCheck ? 'success' : 'danger',
-          'description' => $authCheck ? 'Bearer Token valid - API reachable' : 'Bearer Token invalid - API not reachable',
+        'title' => 'login',
+        'class' => $sessionId ? 'success' : 'danger',
+        'description' => $sessionId ? 'Login Successful. Session ID: ' . $sessionId : 'Login failed',
       ];
       foreach ($server->getModules() as $module) {
 //        /** @var Module $module */
         try {
           $connectorName = $module->getConnectorName();
           $config = $client->getConnectorConfig($connectorName);
-          $currentConfigurationHash = $module->getHash();
+          $currentConfigurationHash = $module->getConfigHash();
 
           $mapper = $module->getMapper();
-          if ($config['hash'] !== $currentConfigurationHash) {
+          if ($config['config_hash'] !== $currentConfigurationHash) {
             $description = '
                             <h2 class="text-danger">WARNING</h2>
-                            <p>The config hash "' . $config['hash'] . '" does not match the persisted config hash
+                            <p>The config hash "' . $config['config_hash'] . '" does not match the persisted config hash
                             "' . $currentConfigurationHash . '" which indicates the PIM schema has changed. To update
                             compatibility you can use the CLI command <code>fourallportal:pinschema</code>.
                         ';
           } else {
             $description = '
-                            <strong>Module Name:</strong> ' . $config['module_name'] . '<br />
-                            <strong>Config Hash:</strong> ' . $config['hash'] . '<br />
+                            <strong>Module Name:</strong> ' . $config['moduleConfig']['module_name'] . '<br />
+                            <strong>Config Hash:</strong> ' . $config['config_hash'] . '<br />
                             <strong>Entity class:</strong> ' . ($mapper !== null) ? $module->getMapper()->getEntityClassName() : 'not found!' . '<br />
                             <strong>Test object UUID:</strong> ' . $module->getTestObjectUuid() . '<br />
                         ';
