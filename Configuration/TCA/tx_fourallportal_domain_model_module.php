@@ -13,14 +13,14 @@ return [
     'enablecolumns' => [],
     'sortby' => 'sorting',
     'default_sortby' => 'sorting ASC',
-    'searchFields' => 'connector_name,mapping_class,config_hash,last_event_id,shell_path,storage_pid,server',
+    'searchFields' => 'connector_name,mapping_class,hash,last_event_id,shell_path,storage_pid,server',
     'iconfile' => 'EXT:fourallportal/Resources/Public/Icons/tx_fourallportal_domain_model_module.gif',
     'security' => [
       'ignorePageTypeRestriction' => true,
     ],
   ],
   'types' => [
-    '1' => ['showitem' => 'connector_name, module_name, mapping_class, enable_dynamic_model, contains_dimensions, config_hash, last_event_id, last_received_event_id, shell_path, storage_pid, fal_storage, usage_flag, test_object_uuid, server'],
+    '1' => ['showitem' => 'connector_name, module_name, mapping_class, enable_dynamic_model, contains_dimensions, hash, last_event_id, last_received_event_id, shell_path, storage_pid, fal_storage, usage_flag, test_object_uuid, server'],
   ],
   'columns' => [
     'connector_name' => [
@@ -57,9 +57,9 @@ return [
         ],
       ],
     ],
-    'config_hash' => [
+    'hash' => [
       'exclude' => true,
-      'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_module.config_hash',
+      'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_module.hash',
       'config' => [
         'type' => 'passthrough',
       ],

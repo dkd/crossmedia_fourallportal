@@ -43,7 +43,7 @@ CREATE TABLE tx_fourallportal_domain_model_module
     mapping_class          varchar(255)         DEFAULT ''  NOT NULL,
     enable_dynamic_model   int(4) unsigned      DEFAULT '1' NOT NULL,
     contains_dimensions    smallint(5) unsigned DEFAULT '1' NOT NULL,
-    config_hash            varchar(255)         DEFAULT ''  NOT NULL,
+    hash                   varchar(255)         DEFAULT ''  NOT NULL,
     last_event_id          int(11)              DEFAULT '0' NOT NULL,
     last_received_event_id int(11)              DEFAULT '0' NOT NULL,
     storage_pid            int(11)              DEFAULT '0' NOT NULL,
