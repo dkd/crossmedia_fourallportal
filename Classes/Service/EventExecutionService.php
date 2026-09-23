@@ -204,7 +204,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
                 $message = sprintf(
                     'Module "%s": Remote config hash "%s" does not match local "%s" - skipping SYNC',
                     $module->getModuleName(),
-                    $module->getConnectorConfiguration()['config_hash'],
+                    $module->getConnectorConfiguration()['hash'],
                     $module->getConfigHash()
                 );
                 $this->response->error($message);
@@ -295,7 +295,7 @@ class EventExecutionService implements SingletonInterface, LoggerAwareInterface
                 $message = sprintf(
                     'Module "%s": Remote config hash "%s" does not match local "%s"',
                     $module->getModuleName(),
-                    $module->getConnectorConfiguration()['config_hash'],
+                    $module->getConnectorConfiguration()['hash'],
                     $module->getConfigHash()
                 );
                 $this->response->error($message);

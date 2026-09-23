@@ -9,8 +9,8 @@
 			<trans-unit id="mapping_class.description">
 				<source>mappingClass</source>
 			</trans-unit>
-			<trans-unit id="config_hash.description">
-				<source>configHash</source>
+			<trans-unit id="hash.description">
+				<source>hash</source>
 			</trans-unit>
 			<trans-unit id="last_event_id.description">
 				<source>lastEventId</source>

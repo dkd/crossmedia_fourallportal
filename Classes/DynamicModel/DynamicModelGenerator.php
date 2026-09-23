@@ -616,8 +616,8 @@ TEMPLATE;
         foreach ($fieldsAndRelations as $originalName => $fieldConfiguration) {
             // We need to reset a possibly overridden types so they use the *module* configuration's list of fields and
             // types as the actual type of the field. This is important to the subsequent logic!
-            if (!empty($moduleConfiguration['field_conf'][$originalName]['type'])) {
-                $fieldConfiguration['type'] = $moduleConfiguration['field_conf'][$originalName]['type'];
+            if (!empty($moduleConfiguration['fields'][$originalName]['type'])) {
+                $fieldConfiguration['type'] = $moduleConfiguration['fields'][$originalName]['type'];
             }
 
             //$fieldName = $fieldConfiguration['field'] ?? $fieldConfiguration['name'];
@@ -727,7 +727,7 @@ TEMPLATE;
         $entityName = $modules[$currentSideModuleName]->getMapper()->getEntityClassName();
         $tableNameCurrent = $this->dataMapper->getDataMap($entityName)->getTableName();
         $textFieldTypes = ['CEText', 'MAMString', 'XMPString'];
-        if (array_key_exists('fulltext', $fieldConfiguration) && in_array($fieldConfiguration['type'], $textFieldTypes)) {
+        if (in_array($fieldConfiguration['type'], $textFieldTypes)) {
             // Shortcut: any fulltext/text typed fields will be "string" in class property and "text" in SQL
             $tca = [
                 'type' => 'text'
@@ -1855,7 +1855,7 @@ TEMPLATE;
         }
         $moduleConfiguration = $module->getModuleConfiguration();
         $connectorConfiguration = $module->getConnectorConfiguration();
-        $fieldConfiguration = $moduleConfiguration['field_conf'] ?? [];
+        $fieldConfiguration = $moduleConfiguration['fields'] ?? [];
         $relationConfiguration = $moduleConfiguration['relation_conf'] ?? [];
         $fieldsToLoad = $connectorConfiguration['fieldsToLoad'] ?? [];
 

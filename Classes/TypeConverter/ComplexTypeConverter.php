@@ -69,7 +69,7 @@ class ComplexTypeConverter extends AbstractUuidAwareObjectTypeConverter implemen
     }
 
     $moduleConfiguration = $module->getModuleConfiguration();
-    $fieldConfiguration = $moduleConfiguration['field_conf'][$originalFieldName];
+    $fieldConfiguration = $moduleConfiguration['fields'][$originalFieldName];
 
     /** @var ComplexType $existingComplexType */
     $existingComplexType = ObjectAccess::getProperty($this->parentObject, $this->propertyName);
