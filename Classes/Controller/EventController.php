@@ -152,7 +152,8 @@ final class EventController extends ActionController
             'eventStatusOptions' => $eventOptions,
             'paginator' => $paginator,
             'pagination' => $pagination,
-            'returnTo' => $returnTo
+            'returnTo' => $returnTo,
+            'nonce' => $this->request->getAttribute('nonce'),
         ]);
         return $view->renderResponse('Event/Index');
     }
