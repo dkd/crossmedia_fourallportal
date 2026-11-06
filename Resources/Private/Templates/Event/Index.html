@@ -36,8 +36,7 @@
         <f:if condition="!{objectId}">
           or
           <label>
-            <f:form.select name="status" value="{status}" class="form-control"
-                           additionalAttributes="{onchange: 'document.getElementById(\'filter-form\').submit();'}">
+            <f:form.select name="status" value="{status}" class="form-control">
               <f:for each="{eventStatusOptions}" as="optionLabel" key="optionValue">
                 <f:if condition="{optionValue} === {status}">
                   <f:then>
@@ -74,5 +73,11 @@
   </div>
 
   <f:render partial="Events" arguments="{_all}"/>
+
+  <script nonce="{nonce}">
+    // Submit filter form when the status select changes
+    document.querySelector('#filter-form select[name="status"]')
+      ?.addEventListener('change', function (event) { event.target.form.submit(); });
+  </script>
 </f:section>
 </html>
