@@ -34,6 +34,14 @@ class ApiClient
     }
 
     /**
+     * API key for the Bearer token, from the extension configuration
+     */
+    protected function getApiKey(): string
+    {
+        return (string)($this->portalConfig['apiKey'] ?? '');
+    }
+
+    /**
      * @return string|false
      * @throws ApiException
      */
@@ -238,7 +246,7 @@ class ApiClient
         curl_setopt($ch, CURLOPT_POST, 0);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $this->server->getPassword(),
+            'Authorization: Bearer ' . $this->getApiKey(),
         ]);
 
         curl_exec($ch);
@@ -427,7 +435,7 @@ class ApiClient
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $this->server->getPassword(),
+            'Authorization: Bearer ' . $this->getApiKey(),
         ]);
 
         $response = curl_exec($ch);
@@ -516,7 +524,7 @@ class ApiClient
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, (bool)$this->portalConfig['verifyPeer']);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $this->server->getPassword(),
+            'Authorization: Bearer ' . $this->getApiKey(),
         ]);
         static::$lastResponse['headers'] = [];
         static::$lastResponse['response'] = $result = curl_exec($ch);

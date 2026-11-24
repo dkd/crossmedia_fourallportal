@@ -55,11 +55,6 @@ class InitialisationService
                     $this->log[] = '* Username: ' . $server['username'];
                 }
 
-                if ($server['password']) {
-                    $currentServer->setPassword($server['password']);
-                    $this->log[] = '* Password: ****';
-                }
-
                 $currentServer->setActive((bool)$server['active']);
                 $this->log[] = '* Active: ' . $server['active'];
 
