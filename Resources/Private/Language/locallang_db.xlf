@@ -15,9 +15,6 @@
 			<trans-unit id="tx_fourallportal_domain_model_server.username">
 				<source>Username</source>
 			</trans-unit>
-			<trans-unit id="tx_fourallportal_domain_model_server.password">
-				<source>Password</source>
-			</trans-unit>
 			<trans-unit id="tx_fourallportal_domain_model_server.active">
 				<source>Active</source>
 			</trans-unit>

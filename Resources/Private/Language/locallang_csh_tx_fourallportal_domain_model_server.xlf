@@ -12,9 +12,6 @@
 			<trans-unit id="username.description">
 				<source>username</source>
 			</trans-unit>
-			<trans-unit id="password.description">
-				<source>password</source>
-			</trans-unit>
 			<trans-unit id="active.description">
 				<source>active</source>
 			</trans-unit>

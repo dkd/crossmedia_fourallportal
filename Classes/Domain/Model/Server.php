@@ -27,7 +27,6 @@ class Server extends AbstractEntity
   protected string $domain = '';
   protected string $customerName = '';
   protected string $username = '';
-  protected string $password = '';
   protected bool $active = false;
 
   /**
@@ -97,16 +96,6 @@ class Server extends AbstractEntity
   public function setUsername(string $username): void
   {
     $this->username = $username;
-  }
-
-  public function getPassword(): string
-  {
-    return $this->password;
-  }
-
-  public function setPassword(string $password): void
-  {
-    $this->password = $password;
   }
 
   public function addModule(Module $module): void

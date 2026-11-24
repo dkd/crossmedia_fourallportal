@@ -10,14 +10,14 @@ return [
     'enablecolumns' => [
       'disabled' => 'hidden',
     ],
-    'searchFields' => 'domain,customer_name,username,password,active,modules',
+    'searchFields' => 'domain,customer_name,username,active,modules',
     'iconfile' => 'EXT:fourallportal/Resources/Public/Icons/tx_fourallportal_domain_model_server.gif',
     'security' => [
       'ignorePageTypeRestriction' => true,
     ],
   ],
   'types' => [
-    '1' => ['showitem' => 'active, domain, customer_name, username, password, modules, dimension_mappings'],
+    '1' => ['showitem' => 'active, domain, customer_name, username, modules, dimension_mappings'],
   ],
   'columns' => [
     'domain' => [
@@ -41,15 +41,6 @@ return [
     'username' => [
       'exclude' => true,
       'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_server.username',
-      'config' => [
-        'type' => 'input',
-        'size' => 30,
-        'eval' => 'trim'
-      ],
-    ],
-    'password' => [
-      'exclude' => true,
-      'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_server.password',
       'config' => [
         'type' => 'input',
         'size' => 30,

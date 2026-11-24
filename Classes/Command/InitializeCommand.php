@@ -37,7 +37,6 @@ can contain an array of servers and modules, e.g.:
         'domain' => '',
         'customerName' => '',
         'username' => '',
-        'password' => '',
         'active' => 1,
         'modules' => [
             'module_name' => [
