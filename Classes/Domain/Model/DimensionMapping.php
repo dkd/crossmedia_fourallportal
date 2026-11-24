@@ -31,7 +31,7 @@ class DimensionMapping extends AbstractEntity
    */
   #[\TYPO3\CMS\Extbase\Annotation\ORM\Cascade(['value' => 'remove'])]
   protected ?ObjectStorage $dimensions = null;
-  protected string $metricOrImperial = 'Metric';
+  protected string $metricOrImperial = 'Metr';
   protected bool $active = false;
 
   public function getLanguage(): int

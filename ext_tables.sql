@@ -158,7 +158,7 @@ CREATE TABLE tx_fourallportal_domain_model_dimensionmapping
     dimensions         int(11) unsigned     DEFAULT '0'      NOT NULL,
 
     language           varchar(255)         DEFAULT ''       NOT NULL,
-    metric_or_imperial varchar(10)          DEFAULT 'Metric' NOT NULL,
+    metric_or_imperial varchar(10)          DEFAULT 'Metr'   NOT NULL,
     active             smallint(5) unsigned DEFAULT '1'      NOT NULL,
 
     tstamp             int(11) unsigned     DEFAULT '0'      NOT NULL,

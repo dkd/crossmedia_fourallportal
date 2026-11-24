@@ -159,6 +159,15 @@
             <trans-unit id="tx_fourallportal_domain_model_dimensionmapping.dimensions">
                 <source>Dimensions</source>
             </trans-unit>
+            <trans-unit id="tx_fourallportal_domain_model_dimensionmapping.metric_or_imperial">
+                <source>Metric/imperial unit</source>
+            </trans-unit>
+            <trans-unit id="tx_fourallportal_domain_model_dimensionmapping.metric_or_imperial.metric">
+                <source>Metric</source>
+            </trans-unit>
+            <trans-unit id="tx_fourallportal_domain_model_dimensionmapping.metric_or_imperial.imperial">
+                <source>Imperial</source>
+            </trans-unit>
             <trans-unit id="tx_fourallportal_domain_model_dimension">
                 <source>Dimension</source>
             </trans-unit>

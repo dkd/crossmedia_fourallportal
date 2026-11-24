@@ -3,6 +3,7 @@ return [
   'ctrl' => [
     'title' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_dimensionmapping',
     'label' => 'language',
+    'label_userFunc' => \Crossmedia\Fourallportal\Backend\DimensionMappingLabel::class . '->getTitle',
     'tstamp' => 'tstamp',
     'crdate' => 'crdate',
     'rootLevel' => 1,
@@ -21,20 +22,17 @@ return [
       'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_dimensionmapping.language',
       'config' => [
         'type' => 'language',
-        'renderType' => 'selectSingle',
-        'special' => 'languages',
-        'default' => 0,
       ]
     ],
     'metric_or_imperial' => [
-      'label' => 'Imperial/Metric unit',
+      'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_dimensionmapping.metric_or_imperial',
       'config' => [
         'type' => 'select',
         'renderType' => 'selectSingle',
-        'default' => 'Metric',
+        'default' => 'Metr',
         'items' => [
-          ['label' => 'Metric', 'value' => 'Metric'],
-          ['label' => 'Imperial', 'value' => 'Imperial'],
+          ['label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_dimensionmapping.metric_or_imperial.metric', 'value' => 'Metr'],
+          ['label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_dimensionmapping.metric_or_imperial.imperial', 'value' => 'Imp'],
         ],
       ],
     ],
@@ -48,10 +46,8 @@ return [
       'label' => 'LLL:EXT:fourallportal/Resources/Private/Language/locallang_db.xlf:tx_fourallportal_domain_model_dimensionmapping.active',
       'config' => [
         'type' => 'check',
-        'default' => 0,
-        'items' => [
-          ['label' => 'LLL:EXT:lang/locallang_core.xlf:labels.enabled']
-        ],
+        'renderType' => 'checkboxToggle',
+        'default' => 1,
       ]
     ],
     'dimensions' => [
